@@ -1,6 +1,11 @@
 import RPi.GPIO as GPIO
 import time
 
+def positive_answer(y_or_n):
+    if len(y_or_n) == 0 or y_or_n[0] == 'y':
+        return True
+    return False
+
 class StepperController:
     pin_output_sequence = [[1,0,0,0],
         [1,1,0,0],
@@ -13,8 +18,8 @@ class StepperController:
 
     step_delay_seconds = 0.001
     movement_direction = 1
-    position = 0
     degrees_per_step = -1
+    current_step = 0
 
     def __init__(self, stepper_pins, sensor_pin, name, degrees_range):
         self.stepper_pins = stepper_pins
@@ -42,6 +47,28 @@ class StepperController:
 
         return True
 
+    def steps_from_degrees(self, degrees):
+        return degrees / self.degrees_per_step
+
+    def step_degrees(self, degrees):
+        desired_step = self.current_step + int(self.steps_from_degrees(degrees))
+        starting_degrees = self.degrees()
+        print("Current step: %d Desired step %d" % (self.current_step, desired_step))
+
+        if degrees > 0:
+            self.movement_direction = 1
+        else:
+	    self.movement_direction = -1 
+            
+        while self.current_step != desired_step:
+            if not self.step():
+                print("Moved %d degrees before reaching an end" % (self.degrees() - starting_degrees))
+	        self.turn_off()
+                return False
+
+	self.turn_off()
+        return True
+
     def degrees(self):
         return self.current_step * self.degrees_per_step
 
@@ -67,28 +94,36 @@ class StepperController:
         self.current_step = 0
         self.movement_direction = 1
 
-        if self.degrees_range < 360:
-            print("! [%s] manually move to end position" % self.name)
-            while not self.sensor_on():
-                continue
-
         print("[%s] calibrating..." % self.name)
 
-        while self.step():
-            continue
+        if self.degrees_range < 360:
+            for count in range(300):
+                self.step()
+            y_or_n = raw_input("! [%s] Am I moving away from the switch? (y/n)" % self.name)
+            if not positive_answer(y_or_n):
+                self.reverse_movement_direction()
+
+            y_or_n = 'y'
+            while positive_answer(y_or_n):
+                for count in range(300):
+                    self.step()
+                y_or_n = raw_input('! [%s] Can I continue? (y/n)' % self.name)
+	else:
+            while self.step():
+                continue
 
         print("[%s] reached one end at %d" % (self.name, self.current_step))
 
-	time.sleep(2)
+
+	time.sleep(0.5)
 
         self.reverse_movement_direction()
 
         while not self.step():
             continue
 
-	time.sleep(2)
+	time.sleep(0.5)
 
-        self.position = 0
         self.current_step = 0
 
         while self.step():
@@ -106,5 +141,21 @@ class StepperController:
 
         while not self.step():
             continue
+ 	
+	self.current_step = 0
 
 	self.turn_off()
+
+    def go_to_origin(self):
+        if self.sensor_on():
+            self.reverse_movement_direction()
+            while not self.step():
+                continue
+
+        if self.current_step > 0:
+            self.movement_direction = -1
+        else:
+            self.movement_direction = 1
+        
+        while self.current_step != 0:
+            self.step()
