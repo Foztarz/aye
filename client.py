@@ -1,6 +1,5 @@
 from picamera import PiCamera
 from picamera.array import PiRGBArray
-import cv2
 import time
 import io
 import socket
