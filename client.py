@@ -6,6 +6,8 @@ import io
 import socket
 import struct
 
+millis = lambda: int(round(time.time() * 1000))
+
 consumer_socket = socket.socket()
 consumer_socket.connect(('172.24.1.1', 8123))
 consumer = consumer_socket.makefile('wb')
@@ -26,6 +28,7 @@ try:
     for frame in camera.capture_continuous(raw_capture, format="jpeg", use_video_port=True):
 
         consumer.write(struct.pack('<L', raw_capture.tell()))
+        consumer.write(struct.pack('<Q', millis()))
         consumer.flush()
         raw_capture.seek(0)
 

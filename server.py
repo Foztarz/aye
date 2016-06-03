@@ -6,46 +6,56 @@ import time
 import numpy as np
 import select
 
-def consume(connection_file, address, average_fps):
+SYNCHRONIZED_THRESHOLD_MS = 30
+
+millis = lambda: int(round(time.time() * 1000))
+
+# TODO have queues for each producer, once they all have the same millis (or within X millis of each other) show
+
+def consume(connection_file):
     start = time.time()
     image_len = struct.unpack('<L', connection_file.read(struct.calcsize('<L')))[0]
-    # Construct a stream to hold the image data and read the image
-    # data from the connection
+    timestamp = struct.unpack('<Q', connection_file.read(struct.calcsize('<Q')))[0]
+
     image_stream = io.BytesIO()
     image_stream.write(connection_file.read(image_len))
-    # Rewind the stream, open it as an image with PIL and do some
-    # processing on it
+
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
     image = cv2.imdecode(data, 1)
     
-    #print('Image is %dx%d' % image.size)
-    #image.verify()
-    #print('Image is verified')
-    cv2.imshow(address, image)
-    cv2.waitKey(1) & 0xFF
     time_taken = time.time() - start
 
-    current_fps = 1./time_taken
-    average_fps = average_fps * smoothing + current_fps * (1 - smoothing)
+    return image, timestamp
 
-    print('%s FPS %f' % (address, average_fps))
+def synchronized(producer_address, timestamp, queues):
+    synchronized = True
+    for other_producer_address, queue in queue.items():
+        other_timestamp = queue[0][1]
+        if producer_address is not other_producer_address:
+            synchronized = synchronized and (abs(timestamp - other_timestamp) < SYNCHRONIZED_THRESHOLD_MS)
 
-    return average_fps
+    return synchronized
 
+def show(queues):
+    for producer_address, queue in queues.items():
+        image = queue[0][0]
+        cv2.imshow(producer_address, image)
+    cv2.waitKey(1) & 0xFF                 
+
+def pop(queues):
+    for producer_address, queue in queues.items():
+        queues[producer_address] = queue[1:]
 
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 8123))
 server_socket.listen(0)
 
-# Accept a single connection and make a file-like object out of it
-# connection = server_socket.accept()[0].makefile('rb')
-
 smoothing = 0.9
 
 producers = []
 file_to_address = {}
-producer_fps = {}
+queues = {}
 
 try:
     while True:
@@ -62,9 +72,29 @@ try:
                 file = connection.makefile('rb')
                 producers.append(file)
                 file_to_address[file] = address[0]
-                producer_fps[file] = 0
             else:
-                producer_fps[to_read] = consume(to_read, file_to_address[to_read], producer_fps[to_read])
+                producer_address = file_to_address[to_read]
+                image, timestamp = consume(to_read)
+
+
+                # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
+
+                # add image, timestamp to producer queue 
+
+                if not queues.has_key(producer_address):
+                    # this is the earliest timestamp for producer 
+                    # if it is close to the other two, display and pop the first in the queue
+                    if synchronized(producer_address, timestamp, queues):
+                        show(queues)
+                        pop(queues)
+                    else:
+                        # else, discard the other two (as we are not going to receive an earlier timestamp for producer due to TCP)
+                        for other_producer_address, queue in queues.items():
+                            if other_producer_address is not producer_address:
+                                queues[other_producer_address] = queue[1:]
+                else:
+                    queues[producer_address] += [(image, timestamp)]
+
 finally:
     for producer in producers:
         producer.close()
