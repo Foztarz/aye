@@ -8,6 +8,13 @@ import struct
 
 millis = lambda: int(round(time.time() * 1000))
 
+def autoExposureLock(camera):
+    camera.shutter_speed = camera.exposure_speed
+    camera.exposure_mode = 'off'
+    gain = camera.awb_gains
+    camera.awb_mode = 'off'
+    camera.awb_gains = gain
+
 consumer_socket = socket.socket()
 consumer_socket.connect(('172.24.1.1', 8123))
 consumer = consumer_socket.makefile('wb')
@@ -17,6 +24,9 @@ resolution = (320, 240)
 camera.resolution = resolution
 camera.framerate = 60
 raw_capture = io.BytesIO()
+
+time.sleep(2)
+autoExposureLock(camera)
 
 smoothing = 0.9
 average_fps = 0

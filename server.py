@@ -5,12 +5,68 @@ import cv2
 import time
 import numpy as np
 import select
+import sys
 
 SYNCHRONIZED_THRESHOLD_MS = 30
 
 millis = lambda: int(round(time.time() * 1000))
+hessian = None
+hessianSearchCount = 20
+hessianSearchError = sys.maxint
 
-# TODO have queues for each producer, once they all have the same millis (or within X millis of each other) show
+def warp(frame1, frame2):
+    global hessian, hessianSearchCount, hessianSearchError
+    if hessian is not None and hessianSearchCount == 0:
+        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+        warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, (frame1_gray.shape[1],frame1_gray.shape[0]))
+        merged = cv2.merge((frame2_gray, warped_frame1, frame2_gray)) 
+        cv2.imshow('merged12', merged)
+        cv2.waitKey(1) & 0xFF
+        errorMatrix = np.abs(warped_frame1 - frame2_gray)
+        cv2.imshow('error', errorMatrix)
+        cv2.waitKey(1) & 0xFF
+    else:
+        surf = cv2.xfeatures2d.SURF_create()
+
+        print("Shapes %s %s" % (str(frame1.shape), str(frame2.shape)))
+        kp1, des1 = surf.detectAndCompute(frame1,None)
+        kp2, des2 = surf.detectAndCompute(frame2,None)
+
+        print("Descriptors length %d %d)" % (len(des1), len(des2)))
+        # BFMatcher with default params
+        bf = cv2.BFMatcher()
+        matches = bf.knnMatch(des1, des2, k=2)
+
+        # Apply ratio test
+        good = []
+        for m,n in matches:
+            if m.distance < 0.75*n.distance:
+                good.append(m)
+
+        src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
+        dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+
+        H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+        warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
+
+        errorMatrix = np.abs(warped_frame1 - frame2_gray)
+        error = np.sum(errorMatrix);
+        if error < hessianSearchError:
+            hessianSearchError = error
+            hessian = H
+
+        print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
+
+        cv2.imshow('error', errorMatrix)
+        cv2.waitKey(1) & 0xFF
+
+        hessianSearchCount = hessianSearchCount - 1
 
 def consume(connection_file):
     start = time.time()
@@ -41,10 +97,15 @@ def synchronized(producer_address, timestamp, queues):
     return synchronized
 
 def show(queues):
+    images = []
     for producer_address, queue in queues.items():
         image = queue[0][0]
+        images.append(image)
         cv2.imshow(producer_address, image)
         cv2.waitKey(1) & 0xFF                 
+
+    if len(images) > 1:
+        warp(images[0], images[1])        
 
 def pop(queues):
     for producer_address in queues.keys():
@@ -110,3 +171,4 @@ finally:
     for producer in producers:
         producer.close()
     server_socket.close()
+
