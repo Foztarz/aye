@@ -10,60 +10,116 @@ import sys
 SYNCHRONIZED_THRESHOLD_MS = 30
 
 millis = lambda: int(round(time.time() * 1000))
+
 hessian = None
-hessianSearchCount = 20
-hessianSearchError = sys.maxint
+hessianSearchCount = 40  
+if len(sys.argv) > 1 and sys.argv[1] == 'load':
+    hessianSearchCount = 0
+
+frame1_pts = []
+frame2_pts = []
+object_pts = []
+image_size = (9,6)
+
+square_size = 2.8 # size of chessboard square in cm
+corner_coordinates = np.zeros((np.prod(image_size), 3), np.float32)
+corner_coordinates[:, :2] = np.indices(image_size).T.reshape(-1, 2)
+corner_coordinates *= square_size
+
+calibrated = False
+
+def save_stereo_calibrate(cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat):
+    np.savez('stereo_calibrate', cam_mat_left=cam_mat_left, dist_coefs_left=dist_coefs_left, cam_mat_right=cam_mat_right, dist_coefs_right=dist_coefs_right, rot_mat=rot_mat, trans_vec=trans_vec, e_mat=e_mat, f_mat=f_mat)
+def load_stereo_calibrate():
+    data = np.load('stereo_calibrate.npz')
+    return data['cam_mat_left'], data['dist_coefs_left'], data['cam_mat_right'], data['dist_coefs_right'], data['rot_mat'], data['trans_vec'], data['e_mat'], data['f_mat']
+
+def stereo_calibrate(frame_size):
+    if len(object_pts) > 0:
+        rms, camera_matrix_1, dist_coefs_1, rvecs, tvecs = cv2.calibrateCamera(object_pts, frame1_pts, frame_size, None, None)
+
+        print("\nRMS:", rms)
+        print("camera matrix:\n", camera_matrix_1)
+        print("distortion coefficients: ", dist_coefs_1.ravel())
+
+        rms, camera_matrix_2, dist_coefs_2, rvecs, tvecs = cv2.calibrateCamera(object_pts, frame2_pts, frame_size, None, None)
+
+        print("\nRMS:", rms)
+        print("camera matrix:\n", camera_matrix_2)
+        print("distortion coefficients: ", dist_coefs_2.ravel())
+
+        criteria = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS,
+                100, 1e-5)
+        flags = (cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST +
+                cv2.CALIB_SAME_FOCAL_LENGTH)
+        (retval, cam_mat_left, dist_coefs_left,
+                cam_mat_right, dist_coefs_right,
+                rot_mat, trans_vec, e_mat,
+                f_mat) = cv2.stereoCalibrate(object_pts, frame1_pts, frame2_pts,  camera_matrix_1, dist_coefs_1, camera_matrix_2, dist_coefs_2, frame_size)#, criteria=criteria, flags=flags)
+        save_stereo_calibrate(cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat);
+        hessian = f_mat
+    else: 
+        print "Skipping calibration"
+        cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat = load_stereo_calibrate()
+
+    return cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat
 
 def warp(frame1, frame2):
-    global hessian, hessianSearchCount, hessianSearchError
-    if hessian is not None and hessianSearchCount == 0:
-        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+    global hessian, hessianSearchCount, frame1_pts, frame2_pts, corner_coordinates, object_pts, cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat, calibrated
+    frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+    frame_size = (frame1.shape[1], frame1.shape[0])
 
-        warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, (frame1_gray.shape[1],frame1_gray.shape[0]))
-        merged = cv2.merge((frame2_gray, warped_frame1, frame2_gray)) 
-        cv2.imshow('merged12', merged)
-        cv2.waitKey(1) & 0xFF
-        errorMatrix = np.abs(warped_frame1 - frame2_gray)
-        cv2.imshow('error', errorMatrix)
+    if hessianSearchCount == 0:
+        if not calibrated:
+            cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, rot_mat, trans_vec, e_mat, f_mat = stereo_calibrate(frame_size)
+            calibrated = True
+
+        rect_left = np.array([])
+        rect_right = np.array([])
+        _, _, proj_left, proj_right, q_mat, _, _ = cv2.stereoRectify(cam_mat_left, dist_coefs_left, cam_mat_right, dist_coefs_right, frame_size, rot_mat, trans_vec, rect_left, rect_right, alpha=1, flags=cv2.CALIB_ZERO_DISPARITY)
+
+        rectified_cam_mat_left = np.array([])
+        map1, map2 = cv2.initUndistortRectifyMap(cam_mat_left, dist_coefs_left, rect_left, rectified_cam_mat_left, frame_size, cv2.CV_32FC1)
+        rectified_1 = cv2.remap(frame1, map1, map2, cv2.INTER_LINEAR)
+        rectified_cam_mat_right = np.array([])
+        map1, map2 = cv2.initUndistortRectifyMap(cam_mat_right, dist_coefs_right, rect_right, rectified_cam_mat_right, frame_size, cv2.CV_32FC1)
+        rectified_2 = cv2.remap(frame2, map1, map2, cv2.INTER_LINEAR)
+
+        #warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, frame_size)
+        cv2.imshow('rectified_1', rectified_1)
+        cv2.imshow('rectified_2', rectified_2)
+
+        rectified1_gray =cv2.cvtColor(rectified_1, cv2.COLOR_BGR2GRAY)
+        rectified2_gray =cv2.cvtColor(rectified_2, cv2.COLOR_BGR2GRAY)
+        merged = cv2.merge((rectified1_gray, rectified2_gray, rectified1_gray)) 
+        cv2.imshow('merged_12', merged)
         cv2.waitKey(1) & 0xFF
     else:
-        surf = cv2.xfeatures2d.SURF_create()
+        found, corners_1 = cv2.findChessboardCorners(frame1, image_size)
+        if not found:
+            print "Chessboard not found"
+            return
+        found, corners_2 = cv2.findChessboardCorners(frame2, image_size)
+        if not found:
+            print "Chessboard not found"
+            return
 
-        print("Shapes %s %s" % (str(frame1.shape), str(frame2.shape)))
-        kp1, des1 = surf.detectAndCompute(frame1,None)
-        kp2, des2 = surf.detectAndCompute(frame2,None)
+        object_pts.append(corner_coordinates)
 
-        print("Descriptors length %d %d)" % (len(des1), len(des2)))
-        # BFMatcher with default params
-        bf = cv2.BFMatcher()
-        matches = bf.knnMatch(des1, des2, k=2)
+        cv2.cornerSubPix(frame1_gray, corners_1, (11, 11), (-1, -1),
+                (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 30, 0.01))
+        cv2.cornerSubPix(frame2_gray, corners_2, (11, 11), (-1, -1),
+                (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 30, 0.01))
 
-        # Apply ratio test
-        good = []
-        for m,n in matches:
-            if m.distance < 0.75*n.distance:
-                good.append(m)
+        frame1_pts.append(corners_1)
+        frame2_pts.append(corners_2)
 
-        src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-        dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+        cv2.drawChessboardCorners(frame1, image_size, corners_1, True)
+        cv2.drawChessboardCorners(frame2, image_size, corners_2, True)
 
-        H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-
-        warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
-
-        errorMatrix = np.abs(warped_frame1 - frame2_gray)
-        error = np.sum(errorMatrix);
-        if error < hessianSearchError:
-            hessianSearchError = error
-            hessian = H
-
-        print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
-
-        cv2.imshow('error', errorMatrix)
+        cv2.imshow('frame1_wcorners', frame1)
+        cv2.imshow('frame2_wcorners', frame2)
         cv2.waitKey(1) & 0xFF
 
         hessianSearchCount = hessianSearchCount - 1
@@ -165,7 +221,7 @@ try:
                                 discard_until = index
                         queues[other_producer_address] = queue[discard_until+1:]
 
-                print map(len, queues.values())
+                #print map(len, queues.values())
 
 finally:
     for producer in producers:
