@@ -169,7 +169,6 @@ def show(first90image, first45image, first0image):
 
         intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
         hsv_list = stokes.toHSV(intensity, degree, angle)
-        print map(lambda a: a.shape, [intensity, degree, angle])
 
         hsv = cv2.merge(hsv_list)
         hsvInBGR = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
@@ -230,7 +229,8 @@ try:
                 first0image, first0timestamp = head(queues, 'pol-0')
 
                 if first90image is None or first45image is None or first0image is None:
-                    print("At least one queue is empty")
+                    #print("At least one queue is empty")
+                    pass
                 elif synchronized(first90timestamp, first45timestamp, first0timestamp):
                     show(first90image, first45image, first0image)
                     pop(queues)
@@ -238,19 +238,10 @@ try:
                     heads = [('pol-90', first90timestamp),('pol-45', first45timestamp),('pol-0', first0timestamp)]
                     heads = filter(lambda h: h[1] is not None, heads)
                     heads.sort(key=itemgetter(1))
-                    print heads
-                    earliest_key, earliest_timestamp = heads[0]
-                    queues[earliest_key] = queues[earliest_key][1:]
-                    ## else, discard the ones that are not close enough 
-                    ## TODO remove first images that are to early of each other to be synchronized
-                    #for other_producer_name, queue in queues.items():
-                    #    if other_producer_name is producer_name:
-                    #        continue
-                    #    discard_until = -1
-                    #    for index, (_, other_timestamp) in enumerate(queue):
-                    #        if abs(timestamp - other_timestamp) > SYNCHRONIZED_THRESHOLD_MS:
-                    #            discard_until = index
-                    #    queues[other_producer_name] = queue[discard_until+1:]
+                    latest_timestamp = heads[-1][1]
+                    late_heads = filter(lambda h: not synchronized_test(h[1], latest_timestamp), heads)
+                    for late_key, _ in late_heads:
+                        queues[late_key] = queues[late_key][1:]
 
                 print map(len, queues.values())
 
