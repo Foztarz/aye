@@ -61,9 +61,6 @@ def warp(frame1, frame1_name, frame2, frame2_name):
 
     if hessian is not None and hessianSearchCount == 0:
         warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, (frame1_gray.shape[1],frame1_gray.shape[0]))
-        merged = cv2.merge((frame2_gray, warped_frame1, frame2_gray)) 
-        cv2.imshow('%s+%s' % (frame1_name, frame2_name), merged)
-        cv2.waitKey(1) & 0xFF
 
         return warped_frame1
     else:
@@ -169,17 +166,18 @@ def show(first90image, first45image, first0image):
 
     if warped45to90 is not None and warped0to90 is not None:
         gray90 = cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
-        merged = cv2.merge((warped0to90, warped45to90, gray90)) 
-        cv2.imshow('merged', merged)
-        cv2.waitKey(1) & 0xFF                 
 
         intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
         hsv_list = stokes.toHSV(intensity, degree, angle)
-        print map(lambda a: a.shape, hsv_list)
+        print map(lambda a: a.shape, [intensity, degree, angle])
 
         hsv = cv2.merge(hsv_list)
         hsvInBGR = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        cv2.imshow("stokes-intensity", np.int8(intensity))
+        cv2.imshow("stokes-degree", degree)
+        cv2.imshow("stokes-angle", angle)
         cv2.imshow("stokes-hsv", hsvInBGR)
+        cv2.waitKey(1) & 0xFF                 
 
 def pop(queues):
     for producer_name in queues.keys():
