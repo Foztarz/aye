@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import io
 import socket
 import struct
@@ -6,67 +8,115 @@ import time
 import numpy as np
 import select
 import sys
+import random
+from operator import itemgetter
 
-SYNCHRONIZED_THRESHOLD_MS = 30
+address_to_name = {
+        '172.24.1.91' : 'pol-0',
+        '172.24.1.97' : 'pol-45',
+        '172.24.1.1' : 'pol-90'
+        }
+
+SYNCHRONIZED_THRESHOLD_MS = 60
 
 millis = lambda: int(round(time.time() * 1000))
-hessian = None
-hessianSearchCount = 20
-hessianSearchError = sys.maxint
+hessians = {}
+hessianSearchCounts = {}
+hessianSearchErrors = {}
 
-def warp(frame1, frame2):
-    global hessian, hessianSearchCount, hessianSearchError
+load_homographies = False
+if len(sys.argv) > 1 and sys.argv[1] == 'load':
+    print("Loading homographies from previously calculated hessians")
+    load_homographies = True
+
+
+def save_homography(from_name, to_name, homography):
+    np.savez('/home/pi/aye/data/homography-%s-to-%s' % (from_name, to_name), homography=homography)
+
+def load_homography(from_name, to_name):
+    data = np.load('/home/pi/aye/data/homography-%s-to-%s.npz' % (from_name, to_name))
+    return data['homography']
+
+def ensure_initialized(dictionary, key1, key2, default):
+    if not dictionary.has_key(key1):
+        dictionary[key1] = {}
+    if not dictionary[key1].has_key(key2):
+        dictionary[key1][key2] = default
+
+def warp(frame1, frame1_name, frame2, frame2_name):
+    global hessians, hessianSearchCounts, hessianSearchErrors
+    
+    ensure_initialized(hessians, frame1_name, frame2_name, None)
+    ensure_initialized(hessianSearchCounts, frame1_name, frame2_name, 20)
+    ensure_initialized(hessianSearchErrors, frame1_name, frame2_name, sys.maxint)
+
+    hessian = hessians[frame1_name][frame2_name]
+    hessianSearchCount = hessianSearchCounts[frame1_name][frame2_name]
+    hessianSearchError = hessianSearchErrors[frame1_name][frame2_name]
+
+    frame1_gray = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    frame2_gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
     if hessian is not None and hessianSearchCount == 0:
-        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-
         warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, (frame1_gray.shape[1],frame1_gray.shape[0]))
         merged = cv2.merge((frame2_gray, warped_frame1, frame2_gray)) 
-        cv2.imshow('merged12', merged)
+        cv2.imshow('%s+%s' % (frame1_name, frame2_name), merged)
         cv2.waitKey(1) & 0xFF
-        errorMatrix = np.abs(warped_frame1 - frame2_gray)
-        cv2.imshow('error', errorMatrix)
-        cv2.waitKey(1) & 0xFF
+
+        return warped_frame1
     else:
-        surf = cv2.xfeatures2d.SURF_create()
+        if load_homographies:
+            hessian = load_homography(frame1_name, frame2_name)
+            hessianSearchCount = 0
 
-        print("Shapes %s %s" % (str(frame1.shape), str(frame2.shape)))
-        kp1, des1 = surf.detectAndCompute(frame1,None)
-        kp2, des2 = surf.detectAndCompute(frame2,None)
+        elif random.random() > 0.95:
 
-        print("Descriptors length %d %d)" % (len(des1), len(des2)))
-        # BFMatcher with default params
-        bf = cv2.BFMatcher()
-        matches = bf.knnMatch(des1, des2, k=2)
+            surf = cv2.xfeatures2d.SURF_create()
 
-        # Apply ratio test
-        good = []
-        for m,n in matches:
-            if m.distance < 0.75*n.distance:
-                good.append(m)
+            print("Shapes %s %s" % (str(frame1.shape), str(frame2.shape)))
+            kp1, des1 = surf.detectAndCompute(frame1,None)
+            kp2, des2 = surf.detectAndCompute(frame2,None)
 
-        src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-        dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+            if des1 is not None and des2 is not None:
+                print("Descriptors length %d %d" % (len(des1), len(des2)))
+                # BFMatcher with default params
+                bf = cv2.BFMatcher()
+                matches = bf.knnMatch(des1, des2, k=2)
 
-        H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                # Apply ratio test
+                good = []
+                for m,n in matches:
+                    if m.distance < 0.75*n.distance:
+                        good.append(m)
 
-        frame1_gray =cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame2_gray =cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+                if good > 20:
+                    src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
+                    dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
 
-        warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
+                    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-        errorMatrix = np.abs(warped_frame1 - frame2_gray)
-        error = np.sum(errorMatrix);
-        if error < hessianSearchError:
-            hessianSearchError = error
-            hessian = H
+                    warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
+                    errorMatrix = np.abs(warped_frame1 - frame2_gray)
+                    error = np.sum(errorMatrix);
+                    if error < hessianSearchError:
+                        hessianSearchError = error
+                        hessian = H
 
-        print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
+                    print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
 
-        cv2.imshow('error', errorMatrix)
-        cv2.waitKey(1) & 0xFF
+                    cv2.imshow('error', errorMatrix)
+                    cv2.waitKey(1) & 0xFF
 
-        hessianSearchCount = hessianSearchCount - 1
+                    hessianSearchCount = hessianSearchCount - 1
+
+                    if hessianSearchCount == 0:
+                        save_homography(frame1_name, frame2_name, hessian)
+
+    hessians[frame1_name][frame2_name] = hessian
+    hessianSearchCounts[frame1_name][frame2_name] = hessianSearchCount
+    hessianSearchErrors[frame1_name][frame2_name] = hessianSearchError
+
+    return None
 
 def consume(connection_file):
     start = time.time()
@@ -84,33 +134,49 @@ def consume(connection_file):
 
     return image, timestamp
 
-def synchronized(producer_address, timestamp, queues):
-    synchronized = True
-    for other_producer_address, queue in queues.items():
-        if len(queue) == 0: 
-            synchronized = False
-            break
-        other_timestamp = queue[0][1]
-        if producer_address is not other_producer_address:
-            synchronized = synchronized and (abs(timestamp - other_timestamp) < SYNCHRONIZED_THRESHOLD_MS)
+def synchronized_test(t1, t2):
+    return t1 is not None and t2 is not None and abs(t1 - t2) < SYNCHRONIZED_THRESHOLD_MS
 
-    return synchronized
+def synchronized(t1, t2, t3):
+    return synchronized_test(t1,t2) and synchronized_test(t2,t3) and synchronized_test(t1,t3)
 
-def show(queues):
-    images = []
-    for producer_address, queue in queues.items():
-        image = queue[0][0]
-        images.append(image)
-        cv2.imshow(producer_address, image)
+def head(queues, name):
+    if not queues.has_key(name):
+        return None, None
+    queue = queues[name]
+    if queue is None or len(queue) < 1:
+        return None, None
+    
+    return queue[0]
+
+    #images = []
+    #names = []
+    #for producer_name, queue in queues.items():
+    #    image = queue[0][0]
+    #    images.append(image)
+    #    names.append(producer_name)
+    #    cv2.imshow(producer_name, image)
+    #    cv2.waitKey(1) & 0xFF                 
+def show(first90image, first45image, first0image):
+    warped45to90 = None
+    warped0to90 = None
+    if first90image is not None and first45image is not None:
+        warped45to90 = warp(first45image, 'pol-45', first90image, 'pol-90')        
+    if first90image is not None and first0image is not None:
+        warped0to90 = warp(first0image, 'pol-0', first90image, 'pol-90')        
+
+    if warped45to90 is not None and warped0to90 is not None:
+        gray90 = cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
+        merged = cv2.merge((warped0to90, warped45to90, gray90)) 
+        cv2.imshow('merged', merged)
         cv2.waitKey(1) & 0xFF                 
 
-    if len(images) > 1:
-        warp(images[0], images[1])        
+    
 
 def pop(queues):
-    for producer_address in queues.keys():
-        current = queues[producer_address]
-        queues[producer_address] = current[1:]
+    for producer_name in queues.keys():
+        current = queues[producer_name]
+        queues[producer_name] = current[1:]
 
 server_socket = socket.socket()
 server_socket.bind(('0.0.0.0', 8123))
@@ -119,7 +185,7 @@ server_socket.listen(0)
 smoothing = 0.9
 
 producers = []
-file_to_address = {}
+file_to_name = {}
 queues = {}
 
 try:
@@ -133,37 +199,52 @@ try:
         for to_read in ready_to_read:
             if to_read is server_socket:
                 connection, address = server_socket.accept()
-                print("New connection from %s" % str(address[0]))
+                producer_address = address[0]
+                print("New connection from %s (%s)" % (producer_address, address_to_name[producer_address]))
                 file = connection.makefile('rb')
                 producers.append(file)
-                file_to_address[file] = address[0]
+
+                file.write(struct.pack('<Q', millis()))
+                file.flush()
+
+                file_to_name[file] = address_to_name[producer_address]
                 queues = {}
             else:
-                producer_address = file_to_address[to_read]
+                producer_name = file_to_name[to_read]
                 image, timestamp = consume(to_read)
 
                 # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
 
                 # add image, timestamp to producer queue 
 
-                queues.setdefault(producer_address, []).append((image, timestamp))
+                queues.setdefault(producer_name, []).append((image, timestamp))
 
-                image, timestamp = queues[producer_address][0]
-                # this is the earliest timestamp for producer 
-                # if it is close to the other two, display and pop the first in the queue
-                if synchronized(producer_address, timestamp, queues):
-                    show(queues)
+                first90image, first90timestamp = head(queues, 'pol-90')
+                first45image, first45timestamp = head(queues, 'pol-45')
+                first0image, first0timestamp = head(queues, 'pol-0')
+
+                if first90image is None or first45image is None or first0image is None:
+                    print("At least one queue is empty")
+                elif synchronized(first90timestamp, first45timestamp, first0timestamp):
+                    show(first90image, first45image, first0image)
                     pop(queues)
                 else:
-                    # else, discard the ones that are not close enough 
-                    for other_producer_address, queue in queues.items():
-                        if other_producer_address is producer_address:
-                            continue
-                        discard_until = -1
-                        for index, (_, other_timestamp) in enumerate(queue):
-                            if abs(timestamp - other_timestamp) > SYNCHRONIZED_THRESHOLD_MS:
-                                discard_until = index
-                        queues[other_producer_address] = queue[discard_until+1:]
+                    heads = [('pol-90', first90timestamp),('pol-45', first45timestamp),('pol-0', first0timestamp)]
+                    heads = filter(lambda h: h[1] is not None, heads)
+                    heads.sort(key=itemgetter(1))
+                    print heads
+                    earliest_key, earliest_timestamp = heads[0]
+                    queues[earliest_key] = queues[earliest_key][1:]
+                    ## else, discard the ones that are not close enough 
+                    ## TODO remove first images that are to early of each other to be synchronized
+                    #for other_producer_name, queue in queues.items():
+                    #    if other_producer_name is producer_name:
+                    #        continue
+                    #    discard_until = -1
+                    #    for index, (_, other_timestamp) in enumerate(queue):
+                    #        if abs(timestamp - other_timestamp) > SYNCHRONIZED_THRESHOLD_MS:
+                    #            discard_until = index
+                    #    queues[other_producer_name] = queue[discard_until+1:]
 
                 print map(len, queues.values())
 
