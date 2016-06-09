@@ -117,12 +117,17 @@ def warp(frame1, frame1_name, frame2, frame2_name):
 
     return None
 
-def consume(connection_file):
-    image_len = struct.unpack('<L', connection_file.read(struct.calcsize('<L')))[0]
-    timestamp = struct.unpack('<Q', connection_file.read(struct.calcsize('<Q')))[0]
+def consume(udp_socket):
+    image_len = struct.unpack('<L', udp_socket.recvfrom(struct.calcsize('<L'))[0])[0]
+    timestamp = struct.unpack('<Q', udp_socket.recvfrom(struct.calcsize('<Q'))[0])[0]
+
+    print("Consuming message from producer with image len %d" % image_len)
+    if image_len > 40000:
+        print("Wrong packet, skipping")
+        return None, None
 
     image_stream = io.BytesIO()
-    image_stream.write(connection_file.read(image_len))
+    image_stream.write(udp_socket.recvfrom(image_len)[0])
 
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
@@ -215,11 +220,14 @@ try:
                 udp_socket.bind(('0.0.0.0', port))
 
                 producers.append(udp_socket)
-                file_to_name[file] = address_to_name[producer_address]
+                file_to_name[udp_socket] = address_to_name[producer_address]
                 queues = {}
             else:
                 producer_name = file_to_name[to_read]
-                image, timestamp = consume(to_read)
+                try:
+                    image, timestamp = consume(to_read)
+                except Exception, message:
+                    continue
 
                 # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
 
@@ -251,5 +259,5 @@ try:
 finally:
     for producer in producers:
         producer.close()
-    server_socket.close()
+    tcp_socket.close()
 
