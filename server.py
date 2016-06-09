@@ -121,11 +121,6 @@ def consume(udp_socket):
     image_len = struct.unpack('<L', udp_socket.recvfrom(struct.calcsize('<L'))[0])[0]
     timestamp = struct.unpack('<Q', udp_socket.recvfrom(struct.calcsize('<Q'))[0])[0]
 
-    print("Consuming message from producer with image len %d" % image_len)
-    if image_len > 40000:
-        print("Wrong packet, skipping")
-        return None, None
-
     image_stream = io.BytesIO()
     image_stream.write(udp_socket.recvfrom(image_len)[0])
 
@@ -232,6 +227,8 @@ try:
                 # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
 
                 # add image, timestamp to producer queue 
+
+                # TODO upper assumption no longer valid when using UDP, need to rethink. Queues keep increasing.
 
                 queues.setdefault(producer_name, []).append((image, timestamp))
 
