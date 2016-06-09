@@ -172,8 +172,14 @@ def show(first90image, first45image, first0image):
         merged = cv2.merge((warped0to90, warped45to90, gray90)) 
         cv2.imshow('merged', merged)
         cv2.waitKey(1) & 0xFF                 
-        intensity, degree, angle = stokes.getStokes(first0image, first45image, first90image)
-        showHSV(intensity, degree, angle)
+
+        intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
+        hsv_list = stokes.toHSV(intensity, degree, angle)
+        print map(lambda a: a.shape, hsv_list)
+
+        hsv = cv2.merge(hsv_list)
+        hsvInBGR = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        cv2.imshow("stokes-hsv", hsvInBGR)
 
 def pop(queues):
     for producer_name in queues.keys():
