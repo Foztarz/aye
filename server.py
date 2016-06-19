@@ -11,6 +11,8 @@ import sys
 import random
 from operator import itemgetter
 
+import stokes
+
 address_to_name = {
         '172.24.1.91' : 'pol-0',
         '172.24.1.97' : 'pol-45',
@@ -170,8 +172,8 @@ def show(first90image, first45image, first0image):
         merged = cv2.merge((warped0to90, warped45to90, gray90)) 
         cv2.imshow('merged', merged)
         cv2.waitKey(1) & 0xFF                 
-
-    
+        intensity, degree, angle = stokes.getStokes(first0image, first45image, first90image)
+        showHSV(intensity, degree, angle)
 
 def pop(queues):
     for producer_name in queues.keys():
