@@ -19,12 +19,18 @@ time.sleep(2)
 smoothing = 0.9
 average_fps = 0
 
+CONSUMER_ADDRESS = '172.24.1.1'
+
 while True:
     try:
-        consumer_socket = socket.socket()
-        consumer_socket.connect(('172.24.1.1', 8123))
-        consumer = consumer_socket.makefile('wb')
-        reference_millis = struct.unpack('<Q', consumer.read(struct.calcsize('<Q')))[0]
+        consumer_tcp_socket = socket.socket()
+        consumer_tcp_socket.connect((CONSUMER_ADDRESS, 8123))
+        consumer_tcp = consumer_tcp_socket.makefile('wb')
+
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        reference_millis = struct.unpack('<Q', consumer_tcp.read(struct.calcsize('<Q')))[0]
+        consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
         drift = reference_millis - millis() 
 
         print("Drift is %f" % drift)
@@ -34,12 +40,11 @@ while True:
         try:
             for frame in camera.capture_continuous(raw_capture, format="jpeg", use_video_port=True):
 
-                consumer.write(struct.pack('<L', raw_capture.tell()))
-                consumer.write(struct.pack('<Q', millis() + drift))
-                consumer.flush()
+                udp_socket.sendto(struct.pack('<L', raw_capture.tell()), (CONSUMER_ADDRESS, consumer_port))
+                udp_socket.sendto(struct.pack('<Q', millis() + drift), (CONSUMER_ADDRESS, consumer_port))
                 raw_capture.seek(0)
 
-                consumer.write(raw_capture.read())
+                udp_socket.sendto(raw_capture.read(), (CONSUMER_ADDRESS, consumer_port))
                 raw_capture.seek(0)
                 raw_capture.truncate(0)
 
@@ -51,7 +56,8 @@ while True:
                 start = time.time()
 
         finally:
-            consumer.close()
-            consumer_socket.close()
+            consumer_tcp.close()
+            consumer_tcp_socket.close()
+            udp_socket.close()
     except Exception as e:
         continue

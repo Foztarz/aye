@@ -118,7 +118,6 @@ def warp(frame1, frame1_name, frame2, frame2_name):
     return None
 
 def consume(connection_file):
-    start = time.time()
     image_len = struct.unpack('<L', connection_file.read(struct.calcsize('<L')))[0]
     timestamp = struct.unpack('<Q', connection_file.read(struct.calcsize('<Q')))[0]
 
@@ -128,8 +127,6 @@ def consume(connection_file):
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
     image = cv2.imdecode(data, 1)
-    
-    time_taken = time.time() - start
 
     return image, timestamp
 
@@ -183,9 +180,9 @@ def pop(queues):
         current = queues[producer_name]
         queues[producer_name] = current[1:]
 
-server_socket = socket.socket()
-server_socket.bind(('0.0.0.0', 8123))
-server_socket.listen(0)
+tcp_socket = socket.socket()
+tcp_socket.bind(('0.0.0.0', 8123))
+tcp_socket.listen(0)
 
 smoothing = 0.9
 
@@ -197,21 +194,27 @@ try:
     while True:
         ready_to_read, ready_to_write, in_error = \
                 select.select(
-                        [server_socket] + producers, # potential readers
+                        [tcp_socket] + producers, # potential readers
                         [], # potential writers
                         [], # potential errors
                         60) 
         for to_read in ready_to_read:
-            if to_read is server_socket:
-                connection, address = server_socket.accept()
+            if to_read is tcp_socket:
+                connection, address = tcp_socket.accept()
                 producer_address = address[0]
-                print("New connection from %s (%s)" % (producer_address, address_to_name[producer_address]))
+                port = 5000 + len(producers)
+                print("New connection from %s (%s). Acceptint on UDP port %d" % (producer_address, address_to_name[producer_address], port))
                 file = connection.makefile('rb')
-                producers.append(file)
-
                 file.write(struct.pack('<Q', millis()))
+                file.write(struct.pack('<L', port))
                 file.flush()
+                file.close()
+                connection.close()
 
+                udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                udp_socket.bind(('0.0.0.0', port))
+
+                producers.append(udp_socket)
                 file_to_name[file] = address_to_name[producer_address]
                 queues = {}
             else:
