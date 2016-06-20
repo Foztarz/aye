@@ -118,11 +118,18 @@ def warp(frame1, frame1_name, frame2, frame2_name):
     return None
 
 def consume(udp_socket):
-    image_len = struct.unpack('<L', udp_socket.recvfrom(struct.calcsize('<L'))[0])[0]
-    timestamp = struct.unpack('<Q', udp_socket.recvfrom(struct.calcsize('<Q'))[0])[0]
+    expected_image_len_size = struct.calcsize('<L')
+    expected_timestamp_size = struct.calcsize('<Q')
+    data = udp_socket.recvfrom(expected_image_len_size + expected_timestamp_size + 40000)[0] # 40000 is more than the biggest image we can get
+    image_len = struct.unpack('<L', data[:expected_image_len_size])[0]
+    timestamp = struct.unpack('<Q', data[expected_image_len_size:expected_image_len_size+expected_timestamp_size])[0]
+
+    print [image_len, timestamp]
+
+    print "Actual remaining image data: ", len(data) - expected_image_len_size - expected_timestamp_size
 
     image_stream = io.BytesIO()
-    image_stream.write(udp_socket.recvfrom(image_len)[0])
+    image_stream.write(data[expected_image_len_size + expected_timestamp_size:])
 
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
@@ -222,6 +229,11 @@ try:
                 try:
                     image, timestamp = consume(to_read)
                 except Exception, message:
+                    print "Exception ", message
+                    continue
+
+                if image is None:
+                    print("Image from %s is None" % producer_name)
                     continue
 
                 # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
@@ -237,7 +249,7 @@ try:
                 first0image, first0timestamp = head(queues, 'pol-0')
 
                 if first90image is None or first45image is None or first0image is None:
-                    #print("At least one queue is empty")
+                    print("At least one queue is empty")
                     pass
                 elif synchronized(first90timestamp, first45timestamp, first0timestamp):
                     show(first90image, first45image, first0image)
@@ -249,9 +261,10 @@ try:
                     latest_timestamp = heads[-1][1]
                     late_heads = filter(lambda h: not synchronized_test(h[1], latest_timestamp), heads)
                     for late_key, _ in late_heads:
+                        print("%s head is late" % late_key)
                         queues[late_key] = queues[late_key][1:]
 
-                print map(len, queues.values())
+                print zip(queues.keys(), map(len, queues.values()))
 
 finally:
     for producer in producers:

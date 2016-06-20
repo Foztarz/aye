@@ -40,8 +40,9 @@ while True:
         try:
             for frame in camera.capture_continuous(raw_capture, format="jpeg", use_video_port=True):
 
-                message = struct.pack('<L', raw_capture.tell()) + struct.pack('<Q', millis() + drift) + raw_capture.read()
+                message = struct.pack('<L', raw_capture.tell()) + struct.pack('<Q', millis() + drift)
                 raw_capture.seek(0)
+                message = message + raw_capture.read()
 
                 udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
                 raw_capture.seek(0)
