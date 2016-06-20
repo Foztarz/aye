@@ -11,7 +11,7 @@ import datetime
 import numpy as np
 
 millis = lambda: int(round(time.time() * 1000))
-timestamp = lambda: "{:%Y-%m-%d-%H:%M:%S}-".format(datetime.datetime.utcnow()) + str(millis())
+timestamp = lambda: "t{:%Y-%m-%d-%H:%M:%S}m".format(datetime.datetime.utcnow()) + str(millis())
 
 camera = PiCamera()
 resolution = (320, 240)
@@ -45,7 +45,7 @@ while True:
         reference_millis = struct.unpack('<Q', consumer_tcp.read(struct.calcsize('<Q')))[0]
         consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
 
-        directory = "%s/%s" % (WORKING_DIRECTORY, timestamp())
+        directory = "%s/%s%s" % (WORKING_DIRECTORY, hostname, timestamp())
         os.makedirs(directory)
 
         drift = reference_millis - millis() 
