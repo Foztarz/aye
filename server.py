@@ -216,7 +216,11 @@ try:
                 queues = {}
             else:
                 producer_name = file_to_name[to_read]
-                image, timestamp = consume(to_read)
+                try:
+                    image, timestamp = consume(to_read)
+                except Exception, message:
+                    print "Consuming from producer %s failed due to " % producer_name + message
+                    continue
 
                 # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
 
