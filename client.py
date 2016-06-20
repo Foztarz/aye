@@ -60,7 +60,7 @@ def save_image(image_name, image):
 camera = PiCamera()
 resolution = (320, 240)
 camera.resolution = resolution
-camera.framerate = 30
+camera.framerate = 5
 raw_capture = io.BytesIO()
 
 camera.iso = 100
