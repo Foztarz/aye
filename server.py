@@ -150,14 +150,6 @@ def head(queues, name):
     
     return queue[0]
 
-    #images = []
-    #names = []
-    #for producer_name, queue in queues.items():
-    #    image = queue[0][0]
-    #    images.append(image)
-    #    names.append(producer_name)
-    #    cv2.imshow(producer_name, image)
-    #    cv2.waitKey(1) & 0xFF                 
 def show(first90image, first45image, first0image):
     warped45to90 = None
     warped0to90 = None
@@ -192,6 +184,7 @@ tcp_socket.listen(0)
 smoothing = 0.9
 
 producers = []
+tcp_producers = []
 file_to_name = {}
 queues = {}
 
@@ -213,8 +206,8 @@ try:
                 file.write(struct.pack('<Q', millis()))
                 file.write(struct.pack('<L', port))
                 file.flush()
-                file.close()
-                connection.close()
+
+                tcp_producers.append(file)
 
                 udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 udp_socket.bind(('0.0.0.0', port))
@@ -233,12 +226,6 @@ try:
                 if image is None:
                     print("Image from %s is None" % producer_name)
                     continue
-
-                # IMPORTANT we are assuming no packet loss - otherwise it is possible that the received timestamp is later than the earliest received of other producers and it is still the earliest for this producer
-
-                # add image, timestamp to producer queue 
-
-                # TODO upper assumption no longer valid when using UDP, need to rethink. Queues keep increasing.
 
                 queues.setdefault(producer_name, []).append((image, timestamp))
 
@@ -266,5 +253,9 @@ try:
 finally:
     for producer in producers:
         producer.close()
+    for tcp_producer in tcp_producers:
+        tcp_producer.send("close")
+        tcp_producer.close()
+
     tcp_socket.close()
 
