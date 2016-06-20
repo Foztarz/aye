@@ -258,6 +258,9 @@ try:
                         queues[late_key] = queues[late_key][1:]
 
                 print zip(queues.keys(), map(len, queues.values()))
+                if max(map(len, queues.values())) > 500:
+                    print("Queues are too big, emptying them to prevent memory freeze")
+                    queues = {}
 
 finally:
     for producer in producers:

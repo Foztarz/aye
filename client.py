@@ -48,7 +48,11 @@ while True:
                 raw_capture.seek(0)
                 message = message + raw_capture.read()
 
-                udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
+                if len(message) > 63000:
+                    print "Message is too long:", len(message)
+                else:
+                    udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
+
                 raw_capture.seek(0)
                 raw_capture.truncate(0)
 
