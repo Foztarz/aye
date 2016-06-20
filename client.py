@@ -16,6 +16,8 @@ OUTDOOR_SHUTTER_SPEED = 100
 INDOOR_AWB_GAINS = (1, 2)
 OUTDOOR_AWB_GAINS = (2, 1)
 
+BUFFER_SIZE = 100
+
 def freeze_camera_settings(camera, indoor = False):
     if indoor:
         camera.shutter_speed = INDOOR_SHUTTER_SPEED
@@ -45,6 +47,15 @@ def timestamp(drift_ms = 0):
 
 def raw_to_cv(raw_image):
     return cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 1)
+
+buffer = []
+def save_image(image_name, image):
+    global buffer
+    buffer.append((image_name, image))
+    if len(buffer) > BUFFER_SIZE:
+        for image_name, image in buffer:
+            cv2.imwrite(image_name, image)
+        buffer = []
 
 camera = PiCamera()
 resolution = (320, 240)
@@ -98,7 +109,7 @@ while True:
                 raw_image = raw_capture.read()
                 message = message + raw_image
 
-                cv2.imwrite("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
+                save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
 
                 if len(message) > 64000:
                     print "Message is too long:", len(message)
