@@ -107,7 +107,8 @@ while True:
                 message = struct.pack('<L', raw_capture.tell()) + struct.pack('<Q', millis() + drift)
                 raw_capture.seek(0)
                 raw_image = raw_capture.read()
-                message = message + raw_image
+                grayscale_image = cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 0)
+                message = message + cv2.imencode('.'+FORMAT, grayscale_image)[1].tostring()
 
                 save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
 

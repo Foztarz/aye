@@ -22,7 +22,7 @@ address_to_name = {
         '172.24.1.1' : 'pol-90'
         }
 
-SYNCHRONIZED_THRESHOLD_MS = 30
+SYNCHRONIZED_THRESHOLD_MS = 100
 
 millis = lambda: int(round(time.time() * 1000))
 hessians = {}
@@ -61,8 +61,8 @@ def warp(frame1, frame1_name, frame2, frame2_name):
     hessianSearchCount = hessianSearchCounts[frame1_name][frame2_name]
     hessianSearchError = hessianSearchErrors[frame1_name][frame2_name]
 
-    frame1_gray = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-    frame2_gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+    frame1_gray = frame1 #cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    frame2_gray = frame2 #cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
     if hessian is not None and hessianSearchCount == 0:
         warped_frame1 = cv2.warpPerspective(frame1_gray, hessian, (frame1_gray.shape[1],frame1_gray.shape[0]))
@@ -146,7 +146,7 @@ def consume(udp_socket):
 
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
-    image = cv2.imdecode(data, 1)
+    image = cv2.imdecode(data, 0)
 
     return image, timestamp
 
@@ -179,7 +179,7 @@ def show(first90image, first45image, first0image):
     warped0to90 = warp(first0image, 'pol-0', first90image, 'pol-90')        
 
     if warped45to90 is not None and warped0to90 is not None:
-        gray90 = cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
+        gray90 = first90image #cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
 
         stokesI, stokesQ, stokesU, intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
         hsv_list = stokes.toHSV(intensity, degree, angle)
