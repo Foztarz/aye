@@ -21,6 +21,9 @@ average_fps = 0
 
 CONSUMER_ADDRESS = '172.24.1.1'
 
+hostname = socket.gethostname()
+
+print "[%s] Trying to connection to consumer..." % hostname
 while True:
     try:
         consumer_tcp_socket = socket.socket()
@@ -33,7 +36,7 @@ while True:
         consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
         drift = reference_millis - millis() 
 
-        print("Drift is %f" % drift)
+        print("[%s] Drift is %f" % drift)
 
         start = time.time()
 
@@ -51,7 +54,7 @@ while True:
                 time_taken = time.time() - start
                 current_fps = 1./time_taken
                 average_fps = average_fps * smoothing + current_fps * (1 - smoothing)        
-                print average_fps
+                #print average_fps
 
                 start = time.time()
 

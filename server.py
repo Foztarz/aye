@@ -19,12 +19,14 @@ address_to_name = {
         '172.24.1.1' : 'pol-90'
         }
 
-SYNCHRONIZED_THRESHOLD_MS = 60
+SYNCHRONIZED_THRESHOLD_MS = 30
 
 millis = lambda: int(round(time.time() * 1000))
 hessians = {}
 hessianSearchCounts = {}
 hessianSearchErrors = {}
+
+data_reminder = ""
 
 load_homographies = False
 if len(sys.argv) > 1 and sys.argv[1] == 'load':
@@ -120,16 +122,12 @@ def warp(frame1, frame1_name, frame2, frame2_name):
 def consume(udp_socket):
     expected_image_len_size = struct.calcsize('<L')
     expected_timestamp_size = struct.calcsize('<Q')
-    data = udp_socket.recvfrom(expected_image_len_size + expected_timestamp_size + 40000)[0] # 40000 is more than the biggest image we can get
+    data = udp_socket.recvfrom(expected_image_len_size + expected_timestamp_size + 60000)[0] # 40000 is more than the biggest image we can get
     image_len = struct.unpack('<L', data[:expected_image_len_size])[0]
     timestamp = struct.unpack('<Q', data[expected_image_len_size:expected_image_len_size+expected_timestamp_size])[0]
 
-    print [image_len, timestamp]
-
-    print "Actual remaining image data: ", len(data) - expected_image_len_size - expected_timestamp_size
-
     image_stream = io.BytesIO()
-    image_stream.write(data[expected_image_len_size + expected_timestamp_size:])
+    image_stream.write(data[expected_image_len_size + expected_timestamp_size: expected_image_len_size + expected_timestamp_size + image_len])
 
     image_stream.seek(0)
     data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
@@ -249,7 +247,6 @@ try:
                 first0image, first0timestamp = head(queues, 'pol-0')
 
                 if first90image is None or first45image is None or first0image is None:
-                    print("At least one queue is empty")
                     pass
                 elif synchronized(first90timestamp, first45timestamp, first0timestamp):
                     show(first90image, first45image, first0image)
