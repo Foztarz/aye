@@ -23,18 +23,21 @@ def freeze_camera_settings(camera, indoor = False):
         camera.shutter_speed = INDOOR_SHUTTER_SPEED
     else:
         camera.shutter_speed = OUTDOOR_SHUTTER_SPEED
+
     camera.exposure_mode = 'off'
-    g = camera.awb_gains
-    camera.awb_mode = 'off'
-    if indoor:
-        camera.awb_gains = INDOOR_AWB_GAINS
-    else: 
-        camera.awb_gains = OUTDOOR_AWB_GAINS
+    #g = camera.awb_gains
+    #camera.awb_mode = 'off'
+    #time.sleep(1)
+
+    #if indoor:
+    #    camera.awb_gains = INDOOR_AWB_GAINS
+    #else: 
+    #    camera.awb_gains = OUTDOOR_AWB_GAINS
 
     print "Camera properties frozen at:"
     print "iso", camera.iso
     print "shutter_speed preferred", camera.exposure_speed, " actual ", camera.shutter_speed
-    print "awb_gains preferred", g, " actual ", camera.awb_gains
+    #print "awb_gains preferred", g, " actual ", camera.awb_gains
     print "analog_gain", camera.analog_gain
     print "digital_gain", camera.digital_gain
 
