@@ -36,7 +36,7 @@ while True:
         consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
         drift = reference_millis - millis() 
 
-        print("[%s] Drift is %f" % drift)
+        print("[%s] Drift is %f" % (hostname, drift))
 
         start = time.time()
 
