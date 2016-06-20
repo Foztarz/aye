@@ -178,13 +178,13 @@ def pop(queues):
         queues[producer_name] = current[1:]
 
 tcp_socket = socket.socket()
+tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcp_socket.bind(('0.0.0.0', 8123))
 tcp_socket.listen(0)
 
 smoothing = 0.9
 
 producers = []
-tcp_producers = []
 file_to_name = {}
 queues = {}
 
@@ -206,8 +206,7 @@ try:
                 file.write(struct.pack('<Q', millis()))
                 file.write(struct.pack('<L', port))
                 file.flush()
-
-                tcp_producers.append(file)
+                file.close()
 
                 udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 udp_socket.bind(('0.0.0.0', port))
@@ -253,9 +252,6 @@ try:
 finally:
     for producer in producers:
         producer.close()
-    for tcp_producer in tcp_producers:
-        tcp_producer.send("close")
-        tcp_producer.close()
 
     tcp_socket.close()
 

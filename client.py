@@ -5,7 +5,6 @@ import time
 import io
 import socket
 import struct
-import select
 
 millis = lambda: int(round(time.time() * 1000))
 
@@ -40,20 +39,7 @@ while True:
         print("[%s] Drift is %f" % (hostname, drift))
 
         try:
-            ready_to_read, ready_to_write, in_error = \
-                select.select(
-                        [consumer_tcp], # potential readers
-                        [], # potential writers
-                        [], # potential errors
-                        60) 
-
-            if len(ready_to_read) > 0:
-                # close message received on TCP socket
-                print("Closing sockets due to producer command.")
-                consumer_tcp.close()
-                consumer_tcp_socket.close()
-                udp_socket.close()
-                continue
+            start = time.time()
 
             for frame in camera.capture_continuous(raw_capture, format="jpeg", use_video_port=True):
 
@@ -76,5 +62,5 @@ while True:
             consumer_tcp.close()
             consumer_tcp_socket.close()
             udp_socket.close()
-    except socket.error:
+    except socket.error, message:
         continue
