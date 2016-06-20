@@ -171,19 +171,12 @@ def magnitude(array):
     return normalized
 
 def show(first90image, first45image, first0image):
-    warped45to90 = None
-    warped0to90 = None
-    if first90image is not None:
-        imshow("90", first90image)
-    if first45image is not None:
-        imshow("45", first45image)
-    if first0image is not None:
-        imshow("0", first0image)
+    cv2.imshow("90", first90image)
+    cv2.imshow("45", first45image)
+    cv2.imshow("0", first0image)
 
-    if first90image is not None and first45image is not None:
-        warped45to90 = warp(first45image, 'pol-45', first90image, 'pol-90')        
-    if first90image is not None and first0image is not None:
-        warped0to90 = warp(first0image, 'pol-0', first90image, 'pol-90')        
+    warped45to90 = warp(first45image, 'pol-45', first90image, 'pol-90')        
+    warped0to90 = warp(first0image, 'pol-0', first90image, 'pol-90')        
 
     if warped45to90 is not None and warped0to90 is not None:
         gray90 = cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
@@ -192,15 +185,15 @@ def show(first90image, first45image, first0image):
         hsv_list = stokes.toHSV(intensity, degree, angle)
 
         hsv = cv2.cvtColor(cv2.merge(hsv_list), cv2.COLOR_HSV2BGR)
-        angleHSV = cv2.cvtColor(cv2.merge(stokes.angleHSV(angle)), cv2.COLOR_HSV2BGR)
+        angle_hsv = cv2.cvtColor(cv2.merge(stokes.angle_hsv(angle)), cv2.COLOR_HSV2BGR)
 
-        cv2.imshow("linear-intensity", normalized_uint8(intensity, 255))
+        cv2.imshow("linear-intensity", aye_utils.normalized_uint8(intensity, 255))
         cv2.imshow("linear-degree", degree)
-        cv2.imshow("stokes-angle", angleHSV)
+        cv2.imshow("stokes-angle", angle_hsv)
         cv2.imshow("stokes-hsv", hsv)
-        cv2.imshow("stokes-i", normalized_uint8(stokesI, 500))
-        cv2.imshow("stokes-q", normalized_uint8(stokesQ, 255))
-        cv2.imshow("stokes-u", normalized_uint8(stokesU, 255))
+        cv2.imshow("stokes-i", aye_utils.normalized_uint8(stokesI, 500))
+        cv2.imshow("stokes-q", aye_utils.normalized_uint8(stokesQ, 255))
+        cv2.imshow("stokes-u", aye_utils.normalized_uint8(stokesU, 255))
         cv2.waitKey(1) & 0xFF                 
 
 def pop(queues):
