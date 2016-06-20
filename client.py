@@ -101,7 +101,7 @@ while True:
 
             count = 0
 
-            FORMAT = "jpeg"
+            FORMAT = "png"
             for frame in camera.capture_continuous(raw_capture, format=FORMAT, use_video_port=True):
 
                 message = struct.pack('<L', raw_capture.tell()) + struct.pack('<Q', millis() + drift)
