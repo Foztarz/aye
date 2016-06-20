@@ -46,7 +46,7 @@ while True:
         consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
 
         directory = "%s/%s" % (WORKING_DIRECTORY, timestamp())
-        os.mkdirs(directory)
+        os.makedirs(directory)
 
         drift = reference_millis - millis() 
 
