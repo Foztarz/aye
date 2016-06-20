@@ -23,7 +23,7 @@ CONSUMER_ADDRESS = '172.24.1.1'
 
 hostname = socket.gethostname()
 
-print "[%s] Trying to connection to consumer..." % hostname
+print "[%s] Trying to connect to consumer..." % hostname
 while True:
     try:
         consumer_tcp_socket = socket.socket()
