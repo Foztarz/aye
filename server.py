@@ -171,6 +171,13 @@ def magnitude(array):
 def show(first90image, first45image, first0image):
     warped45to90 = None
     warped0to90 = None
+    if first90image is not None:
+        imshow("90", first90image)
+    if first45image is not None:
+        imshow("45", first45image)
+    if first0image is not None:
+        imshow("0", first0image)
+
     if first90image is not None and first45image is not None:
         warped45to90 = warp(first45image, 'pol-45', first90image, 'pol-90')        
     if first90image is not None and first0image is not None:

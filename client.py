@@ -10,12 +10,27 @@ import os
 import datetime
 import numpy as np
 
-def freeze_camera_settings(camera):
-    camera.shutter_speed = 33243
+INDOOR_SHUTTER_SPEED = 33243
+OUTDOOR_SHUTTER_SPEED = 2580
+
+INDOOR_AWB_GAINS = (1, 2)
+OUTDOOR_AWB_GAINS = (2, 1)
+
+def freeze_camera_settings(camera, indoor = False):
+    camera.analog_gain = 1
+    camera.digital_gain = 1
+
+    if indoor:
+        camera.shutter_speed = INDOOR_SHUTTER_SPEED
+    else:
+        camera.shutter_speed = OUTDOOR_SHUTTER_SPEED
     camera.exposure_mode = 'off'
     g = camera.awb_gains
     camera.awb_mode = 'off'
-    camera.awb_gains = (1, 2)
+    if indoor:
+        camera.awb_gains = INDOOR_AWB_GAINS
+    else: 
+        camera.awb_gains = OUTDOOR_AWB_GAINS
 
     print "Camera properties frozen at:"
     print "iso", camera.iso
