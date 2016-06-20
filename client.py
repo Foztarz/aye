@@ -10,8 +10,12 @@ import os
 import datetime
 import numpy as np
 
-millis = lambda: int(round(time.time() * 1000))
-timestamp = lambda: "t{:%Y-%m-%d-%H:%M:%S}m".format(datetime.datetime.utcnow()) + str(millis())
+def millis(drift_ms = 0):
+    return int(round(time.time() * 1000)) + drift_ms
+
+def timestamp(drift_ms = 0):
+    time_plus_drift = datetime.datetime.utcnow() + datetime.timedelta(milliseconds=drift_ms)
+    return "t{:%Y-%m-%d-%H:%M:%S}m".format(time_plus_drift) + str(millis(drift))
 
 camera = PiCamera()
 resolution = (320, 240)
@@ -45,16 +49,12 @@ while True:
         reference_millis = struct.unpack('<Q', consumer_tcp.read(struct.calcsize('<Q')))[0]
         consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
 
-        directory = "%s/%s%s" % (WORKING_DIRECTORY, hostname, timestamp())
-        os.makedirs(directory)
-
         drift = reference_millis - millis() 
 
         print("[%s] Drift is %f" % (hostname, drift))
 
-        drift_file = open(directory + "/drift.txt", "w")
-        drift_file.write(str(drift) + "\n")
-        drift_file.close()
+        directory = "%s/%s%s" % (WORKING_DIRECTORY, hostname, timestamp(drift))
+        os.makedirs(directory)
 
         try:
             start = time.time()
@@ -69,7 +69,7 @@ while True:
                 raw_image = raw_capture.read()
                 message = message + raw_image
 
-                cv2.imwrite("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(), FORMAT), raw_to_cv(raw_image))
+                cv2.imwrite("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
 
                 if len(message) > 64000:
                     print "Message is too long:", len(message)
