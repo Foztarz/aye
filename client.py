@@ -17,9 +17,6 @@ INDOOR_AWB_GAINS = (1, 2)
 OUTDOOR_AWB_GAINS = (2, 1)
 
 def freeze_camera_settings(camera, indoor = False):
-    camera.analog_gain = 1
-    camera.digital_gain = 1
-
     if indoor:
         camera.shutter_speed = INDOOR_SHUTTER_SPEED
     else:
