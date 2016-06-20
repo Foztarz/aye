@@ -11,7 +11,7 @@ import datetime
 import numpy as np
 
 INDOOR_SHUTTER_SPEED = 33243
-OUTDOOR_SHUTTER_SPEED = 500
+OUTDOOR_SHUTTER_SPEED = 1500
 
 INDOOR_AWB_GAINS = (1, 2)
 OUTDOOR_AWB_GAINS = (2, 1)
@@ -112,9 +112,10 @@ while True:
                 save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
 
                 if len(message) > 64000:
-                    print "Message is too long:", len(message)
-                else:
-                    udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
+                    print "Message is too long:", len(message), " truncating..."
+                    message = message[:64000]
+
+                udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
 
                 raw_capture.seek(0)
                 raw_capture.truncate(0)
