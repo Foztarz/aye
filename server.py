@@ -71,6 +71,10 @@ def warp(frame1, frame1_name, frame2, frame2_name):
             hessian = load_homography(frame1_name, frame2_name)
             hessianSearchCount = 0
 
+            hessians[frame1_name][frame2_name] = hessian
+            hessianSearchCounts[frame1_name][frame2_name] = hessianSearchCount
+            hessianSearchErrors[frame1_name][frame2_name] = hessianSearchError
+
         elif random.random() > 0.95:
 
             surf = cv2.xfeatures2d.SURF_create()
@@ -79,11 +83,14 @@ def warp(frame1, frame1_name, frame2, frame2_name):
             kp1, des1 = surf.detectAndCompute(frame1,None)
             kp2, des2 = surf.detectAndCompute(frame2,None)
 
-            if des1 is not None and des2 is not None:
+            if des1 is not None and len(des1) > 5 and des2 is not None and len(des2) > 5:
                 print("Descriptors length %d %d" % (len(des1), len(des2)))
                 # BFMatcher with default params
                 bf = cv2.BFMatcher()
                 matches = bf.knnMatch(des1, des2, k=2)
+
+                if matches is None or len(matches) == 0:
+                    return None
 
                 # Apply ratio test
                 good = []
@@ -91,32 +98,37 @@ def warp(frame1, frame1_name, frame2, frame2_name):
                     if m.distance < 0.75*n.distance:
                         good.append(m)
 
-                if good > 20:
-                    src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-                    dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+                if good < 20:
+                    return None
 
-                    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
+                dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
 
-                    warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
-                    errorMatrix = np.abs(warped_frame1 - frame2_gray)
-                    error = np.sum(errorMatrix);
-                    if error < hessianSearchError:
-                        hessianSearchError = error
-                        hessian = H
+                H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-                    print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
+                if H is None:
+                    return None
 
-                    cv2.imshow('error', errorMatrix)
-                    cv2.waitKey(1) & 0xFF
+                warped_frame1 = cv2.warpPerspective(frame1_gray,H,(frame1_gray.shape[1],frame1_gray.shape[0]))
+                errorMatrix = np.abs(warped_frame1 - frame2_gray)
+                error = np.sum(errorMatrix);
+                if error < hessianSearchError:
+                    hessianSearchError = error
+                    hessian = H
 
-                    hessianSearchCount = hessianSearchCount - 1
+                print("[HessianSearch %d] Error is %d best is %d" % (hessianSearchCount, error, hessianSearchError))
 
-                    if hessianSearchCount == 0:
-                        save_homography(frame1_name, frame2_name, hessian)
+                cv2.imshow('error', errorMatrix)
+                cv2.waitKey(1) & 0xFF
 
-    hessians[frame1_name][frame2_name] = hessian
-    hessianSearchCounts[frame1_name][frame2_name] = hessianSearchCount
-    hessianSearchErrors[frame1_name][frame2_name] = hessianSearchError
+                hessianSearchCount = hessianSearchCount - 1
+
+                if hessianSearchCount == 0:
+                    save_homography(frame1_name, frame2_name, hessian)
+
+                hessians[frame1_name][frame2_name] = hessian
+                hessianSearchCounts[frame1_name][frame2_name] = hessianSearchCount
+                hessianSearchErrors[frame1_name][frame2_name] = hessianSearchError
 
     return None
 
