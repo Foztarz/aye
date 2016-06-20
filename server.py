@@ -10,6 +10,7 @@ import select
 import sys
 import random
 from operator import itemgetter
+import ipdb
 
 import stokes
 
@@ -150,6 +151,11 @@ def head(queues, name):
     
     return queue[0]
 
+def magnitude(array):
+    mag = np.fabs(array)
+    normalized = mag / np.amax(mag)
+    return normalized
+
 def show(first90image, first45image, first0image):
     warped45to90 = None
     warped0to90 = None
@@ -161,15 +167,19 @@ def show(first90image, first45image, first0image):
     if warped45to90 is not None and warped0to90 is not None:
         gray90 = cv2.cvtColor(first90image, cv2.COLOR_BGR2GRAY)
 
-        intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
+        stokesI, stokesQ, stokesU, intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
         hsv_list = stokes.toHSV(intensity, degree, angle)
 
         hsv = cv2.merge(hsv_list)
         hsvInBGR = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
         cv2.imshow("stokes-intensity", np.int8(intensity))
         cv2.imshow("stokes-degree", degree)
         cv2.imshow("stokes-angle", angle)
         cv2.imshow("stokes-hsv", hsvInBGR)
+        cv2.imshow("stokes-i", np.uint8(stokesI))
+        cv2.imshow("stokes-q", magnitude(stokesQ))
+        cv2.imshow("stokes-u", magnitude(stokesU))
         cv2.waitKey(1) & 0xFF                 
 
 def pop(queues):

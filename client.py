@@ -5,6 +5,7 @@ import time
 import io
 import socket
 import struct
+import errno
 
 millis = lambda: int(round(time.time() * 1000))
 
@@ -62,5 +63,8 @@ while True:
             consumer_tcp.close()
             consumer_tcp_socket.close()
             udp_socket.close()
-    except socket.error, message:
-        continue
+    except socket.error, e:
+        if e[0] == errno.ECONNREFUSED:
+            continue
+        else:
+            raise

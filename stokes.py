@@ -15,7 +15,7 @@ def getStokes(gray0, gray45, gray90):
     polDoLP=polInt/stokesI #Degree of Linear Polarization
     polAoP=0.5*(np.arctan2(stokesU,stokesQ)) #Angle of Polarization
 
-    return polInt, polDoLP, polAoP
+    return stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP
 
 def toHSV(polInt, polDoLP, polAoP):
     #prepare DOLPi HSV image
