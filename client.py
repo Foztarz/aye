@@ -11,16 +11,18 @@ import datetime
 import numpy as np
 
 def freeze_camera_settings(camera):
-    camera.shutter_speed = camera.exposure_speed
+    camera.shutter_speed = 33243
     camera.exposure_mode = 'off'
     g = camera.awb_gains
     camera.awb_mode = 'off'
-    camera.awb_gains = g
+    camera.awb_gains = (1, 2)
 
     print "Camera properties frozen at:"
     print "iso", camera.iso
-    print "shutter_speed", camera.shutter_speed
-    print "awb_gains", g
+    print "shutter_speed preferred", camera.exposure_speed, " actual ", camera.shutter_speed
+    print "awb_gains preferred", g, " actual ", camera.awb_gains
+    print "analog_gain", camera.analog_gain
+    print "digital_gain", camera.digital_gain
 
 def millis(drift_ms = 0):
     return int(round(time.time() * 1000)) + drift_ms
