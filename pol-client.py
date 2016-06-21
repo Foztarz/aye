@@ -10,7 +10,36 @@ import os
 import datetime
 import numpy as np
 
+INDOOR_SHUTTER_SPEED = 33243
+OUTDOOR_SHUTTER_SPEED = 200
+
+INDOOR_AWB_GAINS = (1, 2)
+OUTDOOR_AWB_GAINS = (2, 1)
+
 BUFFER_SIZE = 100
+
+def freeze_camera_settings(camera, indoor = False):
+    if indoor:
+        camera.shutter_speed = INDOOR_SHUTTER_SPEED
+    else:
+        camera.shutter_speed = OUTDOOR_SHUTTER_SPEED
+
+    camera.exposure_mode = 'off'
+    #g = camera.awb_gains
+    #camera.awb_mode = 'off'
+    #time.sleep(1)
+
+    #if indoor:
+    #    camera.awb_gains = INDOOR_AWB_GAINS
+    #else: 
+    #    camera.awb_gains = OUTDOOR_AWB_GAINS
+
+    print "Camera properties frozen at:"
+    print "iso", camera.iso
+    print "shutter_speed preferred", camera.exposure_speed, " actual ", camera.shutter_speed
+    #print "awb_gains preferred", g, " actual ", camera.awb_gains
+    print "analog_gain", camera.analog_gain
+    print "digital_gain", camera.digital_gain
 
 def millis(drift_ms = 0):
     return int(round(time.time() * 1000)) + drift_ms
@@ -37,7 +66,10 @@ camera.resolution = resolution
 camera.framerate = 5
 raw_capture = io.BytesIO()
 
+camera.iso = 100
 time.sleep(2)
+
+freeze_camera_settings(camera)
 
 smoothing = 0.9
 average_fps = 0
@@ -55,7 +87,10 @@ while True:
         consumer_tcp_socket.connect((CONSUMER_ADDRESS, 8123))
         consumer_tcp = consumer_tcp_socket.makefile('wb')
 
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
         reference_millis = struct.unpack('<Q', consumer_tcp.read(struct.calcsize('<Q')))[0]
+        consumer_port = struct.unpack('<L', consumer_tcp.read(struct.calcsize('<L')))[0]
 
         drift = reference_millis - millis() 
 
@@ -73,16 +108,18 @@ while True:
             for frame in camera.capture_continuous(raw_capture, format=FORMAT, use_video_port=True):
 
                 message = struct.pack('<L', raw_capture.tell()) + struct.pack('<Q', millis() + drift)
-                consumer_tcp.write(message)
-                consumer_tcp.flush()
-
                 raw_capture.seek(0)
                 raw_image = raw_capture.read()
+                grayscale_image = cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 0)
+                message = message + cv2.imencode('.'+FORMAT, grayscale_image)[1].tostring()
 
                 save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
 
-                consumer_tcp.write(raw_image)
-                consumer_tcp.flush()
+                if len(message) > 64000:
+                    print "Message is too long:", len(message), " truncating..."
+                    message = message[:64000]
+
+                udp_socket.sendto(message, (CONSUMER_ADDRESS, consumer_port))
 
                 raw_capture.seek(0)
                 raw_capture.truncate(0)
@@ -98,6 +135,7 @@ while True:
         finally:
             consumer_tcp.close()
             consumer_tcp_socket.close()
+            udp_socket.close()
     except socket.error, e:
         if e[0] == errno.ECONNREFUSED:
             continue
