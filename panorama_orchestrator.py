@@ -1,4 +1,11 @@
 from panorama_control import PanoramaControl
+import socket
+import select
+import struct
+import time
+import io
+import numpy as np
+import cv2
 
 millis = lambda: int(round(time.time() * 1000))
 
@@ -13,27 +20,27 @@ class PanoramaOrchestrator:
     }
 
     def __init__(self):
-        tcp_socket = socket.socket()
-        tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        tcp_socket.bind(('0.0.0.0', 8123))
-        tcp_socket.listen(0)
+        self.tcp_socket = socket.socket()
+        self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.tcp_socket.bind(('0.0.0.0', 8123))
+        self.tcp_socket.listen(0)
 
         self.producers = []
-        self.file_to_name = []
+        self.file_to_name = {}
 
     def connect(self):
         while True:
             ready_to_read, ready_to_write, in_error = \
                     select.select(
-                            [tcp_socket] + producers, # potential readers
+                            [self.tcp_socket] + self.producers, # potential readers
                             [], # potential writers
                             [], # potential errors
                             60) 
             for to_read in ready_to_read:
-                if to_read is tcp_socket:
-                    connection, address = tcp_socket.accept()
+                if to_read is self.tcp_socket:
+                    connection, address = self.tcp_socket.accept()
                     producer_address = address[0]
-                    print("New connection from %s (%s)" % (producer_address, address_to_name[producer_address]))
+                    print("New connection from %s (%s)" % (producer_address, self.address_to_name[producer_address]))
                     file = connection.makefile('rb')
                     file.write(struct.pack('<Q', millis()))
                     file.flush()
@@ -41,12 +48,8 @@ class PanoramaOrchestrator:
                     self.producers.append(file)
                     self.file_to_name[file] = self.address_to_name[producer_address]
                 else:
-                    producer_name = file_to_name[to_read]
-                    try:
-                        image, timestamp = consume(to_read)
-                    except Exception, message:
-                        print "Exception consuming %s" % producer_name, message
-                        continue
+                    producer_name = self.file_to_name[to_read]
+                    image = self.consume(to_read)
 
                     if image is None:
                         print("Image from %s is None" % producer_name)
@@ -57,10 +60,11 @@ class PanoramaOrchestrator:
                     if len(self.producers) == len(self.address_to_name.keys()):
                         break
 
-        print "Waiting for N..."
-        key = cv2.waitKey(0)
-        if key == 'N':
-            break
+        while True:
+            print "Waiting for N..."
+            key = cv2.waitKey(0)
+            if key == 'N':
+                return
 
     def capture(self):
         panorama_control = PanoramaControl()
@@ -68,8 +72,8 @@ class PanoramaOrchestrator:
         while panorama_control.step():
             status = panorama_control.status()
             image_id = 'panorama-%s' % '-'.join(map(str, status))
-            for producer in producers:
-                producer_name = file_to_name[producer]
+            for producer in self.producers:
+                producer_name = self.file_to_name[producer]
                 success = False
                 while attempt < 3: 
                     producer.write(struct.pack('<Q', millis()))
@@ -90,11 +94,8 @@ class PanoramaOrchestrator:
         producer.write(struct.pack('<Q', -1))
         print "Panorama capture complete"
 
-    def consume(file):
-        expected_image_len_size = struct.calcsize('<L')
-        image_len_timestamp = file.read(expected_image_len_size + expected_timestamp_size)
-
-        image_len = struct.unpack('<L', image_len_timestamp[:expected_image_len_size])[0]
+    def consume(self, file):
+        image_len = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
 
         data = file.read(image_len)
 

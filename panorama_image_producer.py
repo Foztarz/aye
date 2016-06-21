@@ -21,7 +21,7 @@ def timestamp(dt):
     return "t{:%Y-%m-%d-%H:%M:%S}".format(dt)
 
 def timestamp_from_millis(millis):
-    return timestamp(datetime.datetime.fromtimestamp(millis))
+    return timestamp(datetime.datetime.fromtimestamp(millis/1000))
 
 class PanoramaImageProducer:
     def __init__(self):
@@ -39,9 +39,11 @@ class PanoramaImageProducer:
 
         millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]
 
+
+        print "[%s] millis %d" % (HOSTNAME, millis)
         print "[%s] sending sample image" % HOSTNAME
         image = self.capture()
-        self.consumer.write(struct.pack('<Q', 32768))
+        self.consumer.write(struct.pack('<L', 32768))
         self.consumer.write(image[:32768]) # exclude raw data
         self.consumer.flush()
 
@@ -71,7 +73,7 @@ class PanoramaImageProducer:
 
     def capture(self):
         self.camera.capture(self.raw_capture, format="jpeg", bayer=True) #http://picamera.readthedocs.io/en/release-1.10/recipes2.html#raw-bayer-data-captures
-        return self.raw_capture
+        return self.raw_capture.getvalue()
 
     def save(self, image, image_id, directory):
         image_name = "%s-%s.%s" % (HOSTNAME, image_id, FORMAT)
