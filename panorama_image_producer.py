@@ -59,7 +59,7 @@ class PanoramaImageProducer:
         image_bytes = self.capture()
         image = cv2_from_bytes(image_bytes)
         smaller_image = cv2.resize(image, (320, 240)) 
-        smaller_image_bytes = cv2.encode('.jpg', smaller_image)[1].tostring()
+        smaller_image_bytes = cv2.imencode('.jpg', smaller_image)[1].tostring()
         self.consumer.write(struct.pack('<L', len(smaller_image_bytes)))
         self.consumer.write(smaller_image_bytes)
         self.consumer.flush()
