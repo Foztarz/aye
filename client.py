@@ -10,6 +10,18 @@ import os
 import datetime
 import numpy as np
 
+def freeze_camera_settings(camera):
+    camera.shutter_speed = camera.exposure_speed
+    camera.exposure_mode = 'off'
+    g = camera.awb_gains
+    camera.awb_mode = 'off'
+    camera.awb_gains = g
+
+    print "Camera properties frozen at:"
+    print "iso", camera.iso
+    print "shutter_speed", camera.shutter_speed
+    print "awb_gains", g
+
 def millis(drift_ms = 0):
     return int(round(time.time() * 1000)) + drift_ms
 
@@ -17,13 +29,19 @@ def timestamp(drift_ms = 0):
     time_plus_drift = datetime.datetime.utcnow() + datetime.timedelta(milliseconds=drift_ms)
     return "t{:%Y-%m-%d-%H:%M:%S}m".format(time_plus_drift) + str(millis(drift))
 
+def raw_to_cv(raw_image):
+    return cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 1)
+
 camera = PiCamera()
 resolution = (320, 240)
 camera.resolution = resolution
 camera.framerate = 30
 raw_capture = io.BytesIO()
 
+camera.iso = 100
 time.sleep(2)
+
+freeze_camera_settings(camera)
 
 smoothing = 0.9
 average_fps = 0
@@ -34,9 +52,6 @@ WORKING_DIRECTORY = '/home/pi/aye-data'
 hostname = socket.gethostname()
 
 print "[%s] Trying to connect to consumer..." % hostname
-
-def raw_to_cv(raw_image):
-    return cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 1)
 
 while True:
     try:
