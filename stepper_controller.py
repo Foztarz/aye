@@ -16,7 +16,7 @@ class StepperController:
         [0,0,0,1],
         [1,0,0,1]]
 
-    step_delay_seconds = 0.003
+    step_delay_seconds = 0.001
     degrees_per_step = -1
     current_step = 0
     max_step = 0
@@ -72,12 +72,8 @@ class StepperController:
         starting_degrees = self.degrees()
         print("Current step: %d Desired step %d" % (self.current_step, desired_step))
 
-        if degrees < 0:
-            step = self.step_back
-        else:
-            step = self.step_forward
         while abs(self.current_step) != abs(desired_step):
-            if not step():
+            if not self.step_forward():
                 print("Moved %d degrees before reaching an end" % (self.degrees() - starting_degrees))
 	        self.turn_off()
                 return False
@@ -187,6 +183,9 @@ class StepperController:
         while not self.step_back():
             continue
 
+        while self.current_step % 8 != 0:
+            self.step_back()
+
         while self.step_back():
             continue
 
@@ -194,5 +193,8 @@ class StepperController:
 
         while not self.step_forward():
             continue
+
+        while self.current_step % 8 != 0:
+            self.step_forward()
 
 
