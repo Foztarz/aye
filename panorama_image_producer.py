@@ -26,10 +26,11 @@ def timestamp_from_millis(millis):
 class PanoramaImageProducer:
     def __init__(self):
         self.camera = PiCamera()
-        resolution = (2592, 1945) # http://picamera.readthedocs.io/en/release-1.10/fov.html
+        resolution = (2592, 1944) # http://picamera.readthedocs.io/en/release-1.10/fov.html
         self.camera.resolution = resolution
         self.camera.framerate = 5
         self.raw_capture = io.BytesIO()
+        time.sleep(2)
 
     def connect_to_consumer(self):
         print "[%s] trying to connect to consumer..." % HOSTNAME
@@ -39,20 +40,20 @@ class PanoramaImageProducer:
 
         millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]
 
-
         print "[%s] millis %d" % (HOSTNAME, millis)
         print "[%s] sending sample image" % HOSTNAME
-        image = self.capture()
-        self.consumer.write(struct.pack('<L', 32768))
-        self.consumer.write(image[:32768]) # exclude raw data
-        self.consumer.flush()
-
         self.directory = "%s/%s-%s" % (WORKING_DIRECTORY, HOSTNAME, timestamp_from_millis(millis))
         os.makedirs(self.directory)
 
+        image = self.capture()
+        self.consumer.write(struct.pack('<L', len(image)))
+        self.consumer.write(image)
+        self.consumer.flush()
+
+        self.save(image, "test", self.directory)
+
+
     def start(self):
-        time.sleep(2)
-        
         print "[%s] ready to capture" % HOSTNAME
 
         while True:
@@ -72,8 +73,13 @@ class PanoramaImageProducer:
                 self.consumer.write('no')
 
     def capture(self):
+        self.raw_capture.seek(0)
+        self.raw_capture.truncate(0)
+
         self.camera.capture(self.raw_capture, format="jpeg", bayer=True) #http://picamera.readthedocs.io/en/release-1.10/recipes2.html#raw-bayer-data-captures
-        return self.raw_capture.getvalue()
+        self.raw_capture.seek(0)
+
+        return self.raw_capture.read()
 
     def save(self, image, image_id, directory):
         image_name = "%s-%s.%s" % (HOSTNAME, image_id, FORMAT)

@@ -35,7 +35,7 @@ class PanoramaOrchestrator:
                             [self.tcp_socket] + self.producers, # potential readers
                             [], # potential writers
                             [], # potential errors
-                            60) 
+                            1) 
             for to_read in ready_to_read:
                 if to_read is self.tcp_socket:
                     connection, address = self.tcp_socket.accept()
@@ -56,9 +56,12 @@ class PanoramaOrchestrator:
                         continue
 
                     cv2.imshow(producer_name, image)
-                    key = cv2.waitKey(1) & 0xFF
-                    if len(self.producers) == len(self.address_to_name.keys()):
-                        break
+
+
+                if len(self.producers) == len(self.address_to_name.keys()):
+                    break
+
+            cv2.waitKey(1)
 
         while True:
             print "Waiting for N..."
@@ -96,6 +99,7 @@ class PanoramaOrchestrator:
 
     def consume(self, file):
         image_len = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+        print "Image length is %d" % image_len
 
         data = file.read(image_len)
 
