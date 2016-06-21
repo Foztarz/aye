@@ -9,7 +9,7 @@ import os
 import datetime
 import numpy as np
 
-BUFFER_SIZE = 100
+BUFFER_SIZE = 10
 
 def millis(drift_ms = 0):
     return int(round(time.time() * 1000)) + drift_ms
@@ -18,17 +18,16 @@ def timestamp(drift_ms = 0):
     time_plus_drift = datetime.datetime.utcnow() + datetime.timedelta(milliseconds=drift_ms)
     return "t{:%Y-%m-%d-%H:%M:%S}m".format(time_plus_drift) + str(millis(drift))
 
-#def raw_to_cv(raw_image):
-#    return cv2.imdecode(np.fromstring(raw_image, dtype=np.uint8), 1)
-
 buffer = []
-#def save_image(image_name, image):
-#    global buffer
-#    buffer.append((image_name, image))
-#    if len(buffer) > BUFFER_SIZE:
-#        for image_name, image in buffer:
-#            cv2.imwrite(image_name, image)
-#        buffer = []
+def save_image(image_name, image):
+    global buffer
+    buffer.append((image_name, image))
+    if len(buffer) > BUFFER_SIZE:
+        for image_name, image in buffer:
+            file = open(image_name, 'w')
+            file.write(image)
+            file.close()
+        buffer = []
 
 camera = PiCamera()
 resolution = (320, 240)
@@ -78,7 +77,7 @@ while True:
                 raw_capture.seek(0)
                 raw_image = raw_capture.read()
 
-                #save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_to_cv(raw_image))
+                save_image("%s/%s-%d-%s.%s" % (directory, hostname, count, timestamp(drift), FORMAT), raw_image)
 
                 consumer_tcp.write(raw_image)
                 consumer_tcp.flush()
