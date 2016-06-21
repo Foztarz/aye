@@ -87,6 +87,7 @@ class PanoramaImageProducer:
                 self.consumer.flush()
             else:
                 self.consumer.write('no')
+                self.consumer.flush()
 
     def capture(self):
         self.raw_capture.seek(0)
@@ -102,6 +103,8 @@ class PanoramaImageProducer:
         file = open(os.path.join(directory, image_name), 'w')
         file.write(image)
         file.close()
+
+        return True
 
 
 if __name__ == "__main__":

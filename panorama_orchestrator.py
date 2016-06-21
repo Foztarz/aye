@@ -69,11 +69,13 @@ class PanoramaOrchestrator:
         panorama_control = PanoramaControl()
 
         while panorama_control.step():
-            status = panorama_control.status()
+            status = panorama_control.get_status()
             image_id = '%s-panorama-part-%s' % (self.data_label, '-'.join(map(str, status)))
             for producer in self.producers:
                 producer_name = self.file_to_name[producer]
                 success = False
+                attempt = 0
+                print('Asking for image from producer %s' % producer_name)
                 while attempt < 3: 
                     producer.write(struct.pack('<Q', millis()))
                     producer.write(struct.pack('<L', len(image_id)))
@@ -84,7 +86,7 @@ class PanoramaOrchestrator:
                         success = True
                         break
                     else: 
-                        retry = retry + 1
+                        attempt = attempt + 1
                         print('Producer %s did not respond ok on %d attempt' % (producer_name, attempt))
 
                 if not success:
