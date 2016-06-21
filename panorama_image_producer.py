@@ -49,11 +49,13 @@ class PanoramaImageProducer:
         consumer_tcp_socket.connect((CONSUMER_ADDRESS, 8123))
         self.consumer = consumer_tcp_socket.makefile('wb')
 
+        data_label_length = struct.unpack('<L', self.consumer.read(struct.calcsize('<L')))[0]
+        data_label = self.consumer.read(data_label_length)
         millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]
 
         print "[%s] millis %d" % (HOSTNAME, millis)
         print "[%s] sending sample image" % HOSTNAME
-        self.directory = "%s/%s-%s" % (WORKING_DIRECTORY, HOSTNAME, timestamp_from_millis(millis))
+        self.directory = "%s/%s-%s%s" % (WORKING_DIRECTORY, HOSTNAME, data_label, timestamp_from_millis(millis))
         os.makedirs(self.directory)
 
         image_bytes = self.capture()
@@ -64,7 +66,7 @@ class PanoramaImageProducer:
         self.consumer.write(smaller_image_bytes)
         self.consumer.flush()
 
-        self.save(image, "test", self.directory)
+        self.save(image, "test", millis, self.directory)
 
 
     def start(self):
@@ -80,7 +82,7 @@ class PanoramaImageProducer:
 
             image_id = self.consumer.read(image_id_size)
 
-            if self.save(self.capture(), image_id, self.directory):
+            if self.save(self.capture(), image_id, millis, self.directory):
                 self.consumer.write('ok')
                 self.consumer.flush()
             else:
@@ -95,8 +97,8 @@ class PanoramaImageProducer:
 
         return self.raw_capture.read()
 
-    def save(self, image, image_id, directory):
-        image_name = "%s-%s.%s" % (HOSTNAME, image_id, FORMAT)
+    def save(self, image, image_id, millis, directory):
+        image_name = "%s-%s%s.%s" % (HOSTNAME, image_id, timestamp_from_millis(millis), FORMAT)
         file = open(os.path.join(directory, image_name), 'w')
         file.write(image)
         file.close()

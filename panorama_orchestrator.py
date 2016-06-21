@@ -6,6 +6,7 @@ import time
 import io
 import numpy as np
 import cv2
+import sys
 
 millis = lambda: int(round(time.time() * 1000))
 
@@ -19,7 +20,7 @@ class PanoramaOrchestrator:
         '172.24.1.137': 'aye-vis'
     }
 
-    def __init__(self):
+    def __init__(self, data_label):
         self.tcp_socket = socket.socket()
         self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.tcp_socket.bind(('0.0.0.0', 8123))
@@ -27,8 +28,10 @@ class PanoramaOrchestrator:
 
         self.producers = []
         self.file_to_name = {}
+        self.data_label = data_label
 
     def connect(self):
+        samples = {}
         while True:
             ready_to_read, ready_to_write, in_error = \
                     select.select(
@@ -42,6 +45,8 @@ class PanoramaOrchestrator:
                     producer_address = address[0]
                     print("New connection from %s (%s)" % (producer_address, self.address_to_name[producer_address]))
                     file = connection.makefile('rb')
+                    file.write(struct.pack('<L', len(self.data_label)))
+                    file.write(self.data_label)
                     file.write(struct.pack('<Q', millis()))
                     file.flush()
 
@@ -51,30 +56,21 @@ class PanoramaOrchestrator:
                     producer_name = self.file_to_name[to_read]
                     image = self.consume(to_read)
 
-                    if image is None:
-                        print("Image from %s is None" % producer_name)
-                        continue
+                    samples[producer_name] = image
 
+            if len(self.producers) == len(self.address_to_name.keys()):
+                for producer_name, image in samples.items():
                     cv2.imshow(producer_name, image)
+                    cv2.waitKey(1)
 
-
-                if len(self.producers) == len(self.address_to_name.keys()):
-                    break
-
-            cv2.waitKey(1)
-
-        while True:
-            print "Waiting for N..."
-            key = cv2.waitKey(0)
-            if key == 'N':
-                return
+                break
 
     def capture(self):
         panorama_control = PanoramaControl()
 
         while panorama_control.step():
             status = panorama_control.status()
-            image_id = 'panorama-%s' % '-'.join(map(str, status))
+            image_id = '%s-panorama-part-%s' % (self.data_label, '-'.join(map(str, status)))
             for producer in self.producers:
                 producer_name = self.file_to_name[producer]
                 success = False
@@ -114,7 +110,7 @@ class PanoramaOrchestrator:
 
 
 if __name__ == "__main__":
-    panorama_orchestrator = PanoramaOrchestrator()
+    panorama_orchestrator = PanoramaOrchestrator(sys.argv[1])
 
     # connect to clients, display preview and wait for user adjustments
     panorama_orchestrator.connect() 
