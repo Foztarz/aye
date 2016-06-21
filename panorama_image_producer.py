@@ -9,6 +9,7 @@ import os
 import datetime
 import numpy as np
 import datetime
+import cv2
 
 CONSUMER_ADDRESS = '172.24.1.1'
 WORKING_DIRECTORY = '/home/pi/aye-data'
