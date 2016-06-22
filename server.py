@@ -12,6 +12,8 @@ import random
 from operator import itemgetter
 import ipdb
 
+import aye_utils
+
 import stokes
 
 address_to_name = {
@@ -189,16 +191,16 @@ def show(first90image, first45image, first0image):
         stokesI, stokesQ, stokesU, intensity, degree, angle = stokes.getStokes(warped0to90, warped45to90, gray90)
         hsv_list = stokes.toHSV(intensity, degree, angle)
 
-        hsv = cv2.merge(hsv_list)
-        hsvInBGR = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        hsv = cv2.cvtColor(cv2.merge(hsv_list), cv2.COLOR_HSV2BGR)
+        angleHSV = cv2.cvtColor(cv2.merge(stokes.angleHSV(angle)), cv2.COLOR_HSV2BGR)
 
-        cv2.imshow("stokes-intensity", np.int8(intensity))
-        cv2.imshow("stokes-degree", degree)
-        cv2.imshow("stokes-angle", angle)
-        cv2.imshow("stokes-hsv", hsvInBGR)
-        cv2.imshow("stokes-i", np.uint8(stokesI))
-        cv2.imshow("stokes-q", magnitude(stokesQ))
-        cv2.imshow("stokes-u", magnitude(stokesU))
+        cv2.imshow("linear-intensity", normalized_uint8(intensity, 255))
+        cv2.imshow("linear-degree", degree)
+        cv2.imshow("stokes-angle", angleHSV)
+        cv2.imshow("stokes-hsv", hsv)
+        cv2.imshow("stokes-i", normalized_uint8(stokesI, 500))
+        cv2.imshow("stokes-q", normalized_uint8(stokesQ, 255))
+        cv2.imshow("stokes-u", normalized_uint8(stokesU, 255))
         cv2.waitKey(1) & 0xFF                 
 
 def pop(queues):
