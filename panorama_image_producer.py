@@ -78,7 +78,7 @@ class PanoramaImageProducer:
 
         if 'pol' in HOSTNAME:
             shutter_speed = struct.unpack('<L', self.consumer.read(struct.calcsize('<L')))[0]
-            print("Setting shutter speed to %d" % shutter_speed)
+            print("Setting shutter speed to %d and turning auto-exposure off" % shutter_speed)
             self.camera.shutter_speed = shutter_speed
             self.camera.exposure_mode = 'off'
 
@@ -93,10 +93,10 @@ class PanoramaImageProducer:
             image_id = self.consumer.read(image_id_size)
 
             if self.save(self.capture(), image_id, millis, self.directory):
-                self.consumer.write('ok')
+                self.consumer.write(struct.pack('<L', 0))
                 self.consumer.flush()
             else:
-                self.consumer.write('no')
+                self.consumer.write(struct.pack('<L', 1))
                 self.consumer.flush()
 
     def capture(self):
@@ -110,6 +110,8 @@ class PanoramaImageProducer:
 
     def save(self, image, image_id, millis, directory):
         image_name = "%s-%s%s.%s" % (HOSTNAME, image_id, timestamp_from_millis(millis), FORMAT)
+        if 'pol' in HOSTNAME:
+            image_name = "%s-%ss%d%s.%s" % (HOSTNAME, image_id, self.camera.shutter_speed, timestamp_from_millis(millis), FORMAT)
         file = open(os.path.join(directory, image_name), 'w')
         file.write(image)
         file.close()

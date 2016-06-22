@@ -74,7 +74,7 @@ class PanoramaOrchestrator:
                 producer.write(struct.pack('<L', self.polarization_shutter))
                 producer.flush()
 
-        panorama_control = PanoramaControl(use_pan=use_pan, use_tilt=use_tilt)
+        panorama_control = PanoramaControl(use_pan=use_pan, use_tilt=use_tilt, pan_step_degrees = 5)
 
         while panorama_control.step():
             time.sleep(1)
@@ -94,23 +94,28 @@ class PanoramaOrchestrator:
                 producer_name = self.file_to_name[producer]
 
                 success = False
-                attempt = 0
                 print('Asking for image from producer %s' % producer_name)
-                while attempt < 3: 
-                    producer.write(struct.pack('<Q', millis()))
-                    producer.write(struct.pack('<L', len(image_id)))
-                    producer.write(image_id)
-                    producer.flush()
-                    ok = producer.read(2)
-                    if ok == 'ok':
-                        success = True
-                        break
-                    else: 
-                        attempt = attempt + 1
-                        print('Producer %s did not respond ok on %d attempt' % (producer_name, attempt))
 
-                if not success:
-                    print('Failed to contact producer %s. Panorama capture failed at %s.' % (producer_name, image_id))
+                producer.write(struct.pack('<Q', millis()))
+                producer.write(struct.pack('<L', len(image_id)))
+                producer.write(image_id)
+                producer.flush()
+
+            responses = 0
+            while responses < len(self.producers)
+                ready_to_read, ready_to_write, in_error = \
+                        select.select(
+                                self.producers, # potential readers
+                                [], # potential writers
+                                [], # potential errors
+                                1) 
+
+                for producer in ready_to_read:
+                    responses = responses + 1
+                    result = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+                    if result != 0:
+                        producer_name = self.file_to_name[producer]
+                        print('Producer %s produced an error code %d.' % (producer_name, result))
 
         for producer in self.producers:
             producer.write(struct.pack('<Q', 0))
