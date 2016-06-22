@@ -66,6 +66,8 @@ class PanoramaOrchestrator:
 
             if len(self.producers) == len(self.address_to_name.keys()):
                 print("All producers are connected.")
+                cv2.imshow(samples['aye-vis'])
+                cv2.waitKey(0)
                 break
 
     def capture(self, use_pan, use_tilt):
@@ -74,48 +76,34 @@ class PanoramaOrchestrator:
                 producer.write(struct.pack('<L', self.polarization_shutter))
                 producer.flush()
 
-        panorama_control = PanoramaControl(use_pan=use_pan, use_tilt=use_tilt, pan_step_degrees = 5)
+        image_id = self.data_label
 
-        while panorama_control.step():
-            time.sleep(1)
-            (pan, pan_degrees), (tilt, tilt_degrees) = panorama_control.get_status()
-            image_id = '%s-%d-%s-%d-%s' % (pan, pan_degrees, tilt, tilt_degrees, self.data_label)
+        for producer in self.producers:
+            producer_name = self.file_to_name[producer]
 
-            if not pan:
-                image_id = '%s-%d-%s' % (tilt, tilt_degrees, self.data_label)
+            success = False
+            print('Asking for image from producer %s' % producer_name)
 
-            if not tilt:
-                image_id = '%s-%d-%s' % (pan, pan_degrees, self.data_label)
+            producer.write(struct.pack('<Q', millis()))
+            producer.write(struct.pack('<L', len(image_id)))
+            producer.write(image_id)
+            producer.flush()
 
-            if not tilt and not pan:
-                image_id = '%s' % self.data_label
+        responses = 0
+        while responses < len(self.producers):
+            ready_to_read, ready_to_write, in_error = \
+                    select.select(
+                            self.producers, # potential readers
+                            [], # potential writers
+                            [], # potential errors
+                            1) 
 
-            for producer in self.producers:
-                producer_name = self.file_to_name[producer]
-
-                success = False
-                print('Asking for image from producer %s' % producer_name)
-
-                producer.write(struct.pack('<Q', millis()))
-                producer.write(struct.pack('<L', len(image_id)))
-                producer.write(image_id)
-                producer.flush()
-
-            responses = 0
-            while responses < len(self.producers)
-                ready_to_read, ready_to_write, in_error = \
-                        select.select(
-                                self.producers, # potential readers
-                                [], # potential writers
-                                [], # potential errors
-                                1) 
-
-                for producer in ready_to_read:
-                    responses = responses + 1
-                    result = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
-                    if result != 0:
-                        producer_name = self.file_to_name[producer]
-                        print('Producer %s produced an error code %d.' % (producer_name, result))
+            for producer in ready_to_read:
+                responses = responses + 1
+                result = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+                if result != 0:
+                    producer_name = self.file_to_name[producer]
+                    print('Producer %s produced an error code %d.' % (producer_name, result))
 
         for producer in self.producers:
             producer.write(struct.pack('<Q', 0))
