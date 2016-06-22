@@ -112,7 +112,9 @@ class PanoramaOrchestrator:
                 if not success:
                     print('Failed to contact producer %s. Panorama capture failed at %s.' % (producer_name, image_id))
 
-        producer.write(struct.pack('<Q', -1))
+        for producer in self.producers:
+            producer.write(struct.pack('<Q', 0))
+
         print "Panorama capture complete"
 
     def consume(self, file):

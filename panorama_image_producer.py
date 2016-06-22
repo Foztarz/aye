@@ -59,7 +59,7 @@ class PanoramaImageProducer:
         os.makedirs(self.directory)
 
         if HOSTNAME == 'aye-vis':
-            self.consumer.write(struct.pack('<L', self.camera.shutter_speed))
+            self.consumer.write(struct.pack('<L', self.camera.exposure_speed))
             self.consumer.flush()
 
         image_bytes = self.capture()
@@ -84,7 +84,7 @@ class PanoramaImageProducer:
 
         while True:
             millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]
-            if millis == -1:
+            if millis == 0:
                 print "Received end signal from orchestrator"
                 break
 
