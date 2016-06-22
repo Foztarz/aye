@@ -31,7 +31,6 @@ class PanoramaOrchestrator:
         self.data_label = data_label
 
     def connect(self):
-        samples = {}
         while True:
             ready_to_read, ready_to_write, in_error = \
                     select.select(
@@ -58,11 +57,6 @@ class PanoramaOrchestrator:
                         print "Polarization shutter is %d" % self.polarization_shutter
 
                     self.file_to_name[file] = producer_name 
-                else:
-                    producer_name = self.file_to_name[to_read]
-                    image = self.consume(to_read)
-
-                    samples[producer_name] = image
 
             if len(self.producers) == len(self.address_to_name.keys()):
                 print("All producers are connected.")
@@ -102,7 +96,7 @@ class PanoramaOrchestrator:
                 producer.flush()
 
             responses = 0
-            while responses < len(self.producers)
+            while responses < len(self.producers):
                 ready_to_read, ready_to_write, in_error = \
                         select.select(
                                 self.producers, # potential readers
@@ -112,7 +106,7 @@ class PanoramaOrchestrator:
 
                 for producer in ready_to_read:
                     responses = responses + 1
-                    result = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+                    result = struct.unpack('<L', producer.read(struct.calcsize('<L')))[0]
                     if result != 0:
                         producer_name = self.file_to_name[producer]
                         print('Producer %s produced an error code %d.' % (producer_name, result))

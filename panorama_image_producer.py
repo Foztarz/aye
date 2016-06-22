@@ -9,7 +9,6 @@ import os
 import datetime
 import numpy as np
 import datetime
-import cv2
 
 CONSUMER_ADDRESS = '172.24.1.1'
 WORKING_DIRECTORY = '/home/pi/aye-data'
@@ -23,16 +22,6 @@ def timestamp(dt):
 
 def timestamp_from_millis(millis):
     return timestamp(datetime.datetime.fromtimestamp(millis/1000))
-
-def cv2_from_bytes(image_bytes):
-    image_stream = io.BytesIO()
-    image_stream.write(image_bytes)
-
-    image_stream.seek(0)
-    data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
-    image = cv2.imdecode(data, 1)
-
-    return image
 
 class PanoramaImageProducer:
     def __init__(self):
@@ -63,14 +52,8 @@ class PanoramaImageProducer:
             self.consumer.flush()
 
         image_bytes = self.capture()
-        image = cv2_from_bytes(image_bytes)
-        smaller_image = cv2.resize(image, (320, 240)) 
-        smaller_image_bytes = cv2.imencode('.jpg', smaller_image)[1].tostring()
-        self.consumer.write(struct.pack('<L', len(smaller_image_bytes)))
-        self.consumer.write(smaller_image_bytes)
-        self.consumer.flush()
 
-        self.save(image, "test", millis, self.directory)
+        self.save(image_bytes, "test", millis, self.directory)
 
 
     def start(self):
