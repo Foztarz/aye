@@ -8,7 +8,7 @@ def getStokes(gray0, gray45, gray90):
     #calculate Stokes parameters
     stokesI=gray0_d+gray90_d+.1 #.1 added here to prevent division by zero later on
     stokesQ=gray0_d-gray90_d
-    stokesU=2*gray45_d-gray0_d-gray90_d
+    stokesU=2*gray45_d-gray0_d-gray90_d + 1
     #calculate polarization parameters
     polInt=np.sqrt(1+np.square(.1+stokesQ)+np.square(.1+stokesU)) #Linear Polarization Intensity
 
@@ -29,8 +29,8 @@ def toHSV(polInt, polDoLP, polAoP):
 
 def angle_hsv(angle):
     H = angle_to_hue(angle)
-    S = 255*np.ones((240,320), 'uint8')
-    V = 255*np.ones((240,320), 'uint8')
+    S = 255*np.ones(angle.shape, 'uint8')
+    V = 255*np.ones(angle.shape, 'uint8')
     
     return [H,S,V]
     

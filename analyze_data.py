@@ -126,29 +126,33 @@ data = []
 
 def interactive():
     global data
-    try:
-        cv2.namedWindow("0")
-        cv2.namedWindow("45")
-        cv2.namedWindow("90")
+    cv2.namedWindow("0")
+    cv2.namedWindow("45")
+    cv2.namedWindow("90")
 
-        for data in get_latest_data():
-            current_data = data
-            map(lambda d: cv2.imshow(str(d[0]), d[1]), data)
-            gray0 = cv2.cvtColor(data[0][1], cv2.COLOR_BGR2GRAY)
-            gray45 = cv2.cvtColor(data[1][1], cv2.COLOR_BGR2GRAY)
-            gray90 = cv2.cvtColor(data[2][1], cv2.COLOR_BGR2GRAY)
-            stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(gray0, gray45, gray90)
-            cv2.imshow('stokes-i', normalized_uint8(stokesI, 500))
-            cv2.imshow('stokes-q', normalized_uint8(stokesQ, 255))
-            cv2.imshow('stokes-u', normalized_uint8(stokesU, 255))
-            cv2.imshow('linear-intensity', normalized_uint8(polInt, 255))
-            cv2.imshow('linear-degree', polDoLP)
-            H = np.uint8((polAoP+(3.1416/2))*(180/3.1416))
-            S = 255*np.ones((240,320), 'uint8')
-            V = 255*np.ones((240,320), 'uint8')
-            cv2.imshow('angle', cv2.cvtColor(cv2.merge([H,S,V]), cv2.COLOR_HSV2BGR))
+    for data in get_latest_data():
+        current_data = data
+        map(lambda d: cv2.imshow(str(d[0]), d[1]), data)
+        display(data)
+        cv2.waitKey()
 
-            cv2.imshow('hsv', cv2.cvtColor(cv2.merge(stokes.toHSV(polInt, polDoLP, polAoP)), cv2.COLOR_HSV2BGR))
-            cv2.waitKey()
-    finally:
-        cv2.destroyAllWindows()
+gray0, gray45, gray90, stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = None, None, None, None, None, None, None, None, None
+
+def display(data):
+    global gray0, gray45, gray90, stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP
+    gray0 = cv2.cvtColor(data[0][1], cv2.COLOR_BGR2GRAY)
+    gray45 = cv2.cvtColor(data[1][1], cv2.COLOR_BGR2GRAY)
+    gray90 = cv2.cvtColor(data[2][1], cv2.COLOR_BGR2GRAY)
+    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(gray0, gray45, gray90)
+    cv2.imshow('stokes-i', aye_utils.normalized_uint8(stokesI, 500))
+    cv2.imshow('stokes-q', aye_utils.normalized_uint8(stokesQ, 255))
+    cv2.imshow('stokes-u', aye_utils.normalized_uint8(stokesU, 255))
+    cv2.imshow('linear-intensity', aye_utils.normalized_uint8(polInt, 255))
+    cv2.imshow('linear-degree', polDoLP)
+    H = np.uint8((polAoP+(3.1416/2))*(180/3.1416))
+    S = 255*np.ones((240,320), 'uint8')
+    V = 255*np.ones((240,320), 'uint8')
+    cv2.imshow('angle', cv2.cvtColor(cv2.merge([H,S,V]), cv2.COLOR_HSV2BGR))
+
+    cv2.imshow('hsv', cv2.cvtColor(cv2.merge(stokes.toHSV(polInt, polDoLP, polAoP)), cv2.COLOR_HSV2BGR))
+
