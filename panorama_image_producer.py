@@ -58,6 +58,10 @@ class PanoramaImageProducer:
         self.directory = "%s/%s-%s%s" % (WORKING_DIRECTORY, HOSTNAME, data_label, timestamp_from_millis(millis))
         os.makedirs(self.directory)
 
+        if HOSTNAME == 'aye-vis':
+            self.consumer.write(struct.pack('<L', self.camera.shutter_speed))
+            self.consumer.flush()
+
         image_bytes = self.capture()
         image = cv2_from_bytes(image_bytes)
         smaller_image = cv2.resize(image, (320, 240)) 
@@ -71,6 +75,12 @@ class PanoramaImageProducer:
 
     def start(self):
         print "[%s] ready to capture" % HOSTNAME
+
+        if 'pol' in HOSTNAME:
+            shutter_speed = struct.unpack('<L', self.consumer.read(struct.calcsize('<L')))[0]
+            print("Setting shutter speed to %d" % shutter_speed)
+            self.camera.shutter_speed = shutter_speed
+            camera.exposure_mode = 'off'
 
         while True:
             millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]

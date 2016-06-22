@@ -51,7 +51,12 @@ class PanoramaOrchestrator:
                     file.flush()
 
                     self.producers.append(file)
-                    self.file_to_name[file] = self.address_to_name[producer_address]
+
+                    producer_name = self.address_to_name[producer_address]
+                    if producer_name == 'aye-vis':
+                        self.polarization_shutter = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+
+                    self.file_to_name[file] = producer_name 
                 else:
                     producer_name = self.file_to_name[to_read]
                     image = self.consume(to_read)
@@ -59,20 +64,35 @@ class PanoramaOrchestrator:
                     samples[producer_name] = image
 
             if len(self.producers) == len(self.address_to_name.keys()):
-                for producer_name, image in samples.items():
-                    cv2.imshow(producer_name, image)
-                    cv2.waitKey(1)
-
+                print("All producers are connected.")
                 break
 
-    def capture(self):
-        panorama_control = PanoramaControl()
+    def capture(self, use_pan, use_tilt):
+
+        for producer in self.producers:
+            if 'pol' in self.file_to_name[producer]:
+                producer.write(struct.pack('<L', self.polarization_shutter))
+                producer.flush()
+
+        panorama_control = PanoramaControl(use_pan=pan, use_tilt=use_tilt)
 
         while panorama_control.step():
-            status = panorama_control.get_status()
-            image_id = '%s-panorama-part-%s' % (self.data_label, '-'.join(map(str, status)))
+            time.sleep(1)
+            (pan, pan_degrees), (tilt, tilt_degrees) = panorama_control.get_status()
+            image_id = '%s-%d-%s-%d-%s' % (pan, pan_degrees, tilt, tilt_degrees, self.data_label)
+
+            if not pan:
+                image_id = '%s-%d-%s' % (tilt, tilt_degrees, self.data_label)
+
+            if not tilt:
+                image_id = '%s-%d-%s' % (pan, pan_degrees, self.data_label)
+
+            if not tilt and not pan:
+                image_id = '%s' % self.data_label
+
             for producer in self.producers:
                 producer_name = self.file_to_name[producer]
+
                 success = False
                 attempt = 0
                 print('Asking for image from producer %s' % producer_name)
@@ -118,4 +138,4 @@ if __name__ == "__main__":
     panorama_orchestrator.connect() 
 
     # capture the panorama
-    panorama_orchestrator.capture()
+    panorama_orchestrator.capture(use_pan=True, use_tilt=False)
