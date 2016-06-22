@@ -55,6 +55,7 @@ class PanoramaOrchestrator:
                     producer_name = self.address_to_name[producer_address]
                     if producer_name == 'aye-vis':
                         self.polarization_shutter = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+                        print "Polarization shutter is %d" % self.polarization_shutter
 
                     self.file_to_name[file] = producer_name 
                 else:
@@ -68,13 +69,12 @@ class PanoramaOrchestrator:
                 break
 
     def capture(self, use_pan, use_tilt):
-
         for producer in self.producers:
             if 'pol' in self.file_to_name[producer]:
                 producer.write(struct.pack('<L', self.polarization_shutter))
                 producer.flush()
 
-        panorama_control = PanoramaControl(use_pan=pan, use_tilt=use_tilt)
+        panorama_control = PanoramaControl(use_pan=use_pan, use_tilt=use_tilt)
 
         while panorama_control.step():
             time.sleep(1)

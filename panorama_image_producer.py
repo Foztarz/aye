@@ -80,7 +80,7 @@ class PanoramaImageProducer:
             shutter_speed = struct.unpack('<L', self.consumer.read(struct.calcsize('<L')))[0]
             print("Setting shutter speed to %d" % shutter_speed)
             self.camera.shutter_speed = shutter_speed
-            camera.exposure_mode = 'off'
+            self.camera.exposure_mode = 'off'
 
         while True:
             millis = struct.unpack('<Q', self.consumer.read(struct.calcsize('<Q')))[0]
