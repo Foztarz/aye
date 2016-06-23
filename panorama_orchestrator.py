@@ -64,9 +64,9 @@ class PanoramaOrchestrator:
 
                     samples[producer_name] = image
 
-            if len(self.producers) == len(self.address_to_name.keys()):
+            if len(samples) == len(self.producers) and len(self.producers) == len(self.address_to_name.keys()):
                 print("All producers are connected.")
-                cv2.imshow(samples['aye-vis'])
+                cv2.imshow('aye-vis', samples['aye-vis'])
                 cv2.waitKey(0)
                 break
 
@@ -100,7 +100,7 @@ class PanoramaOrchestrator:
 
             for producer in ready_to_read:
                 responses = responses + 1
-                result = struct.unpack('<L', file.read(struct.calcsize('<L')))[0]
+                result = struct.unpack('<L', producer.read(struct.calcsize('<L')))[0]
                 if result != 0:
                     producer_name = self.file_to_name[producer]
                     print('Producer %s produced an error code %d.' % (producer_name, result))

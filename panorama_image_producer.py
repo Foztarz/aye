@@ -72,7 +72,6 @@ class PanoramaImageProducer:
 
         self.save(image, "test", millis, self.directory)
 
-
     def start(self):
         print "[%s] ready to capture" % HOSTNAME
 
