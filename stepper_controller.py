@@ -48,7 +48,7 @@ class StepperController:
 
     def sensor_on(self):
         sensor_value = GPIO.input(self.sensor_pin) 
-	if sensor_value is 0: 
+        if sensor_value is 0:
             return False
         return True
 
@@ -80,14 +80,14 @@ class StepperController:
 
         print("[%s] reached one end at %d" % (self.name, self.current_step))
 
-	time.sleep(2)
+        time.sleep(2)
 
         self.reverse_movement_direction()
 
         while not self.step():
             continue
 
-	time.sleep(2)
+        time.sleep(2)
 
         self.position = 0
         self.current_step = 0
@@ -97,7 +97,7 @@ class StepperController:
 
         print("[%s] reached other end at %d" % (self.name, self.current_step))
 
-	time.sleep(2)
+        time.sleep(2)
 
         self.degrees_per_step = abs(float(self.degrees_range) / self.current_step)
 
@@ -108,4 +108,4 @@ class StepperController:
         while not self.step():
             continue
 
-	self.turn_off()
+        self.turn_off()

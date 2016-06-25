@@ -7,7 +7,7 @@ import numpy as np
 import aye_utils
 
 DATA_DIRECTORY = os.path.expanduser("~/aye-data/")
-SYNCHRONIZED_THRESHOLD_MS = 30
+SYNCHRONIZED_THRESHOLD_MS = 100
 
 def get_files_in_directory(directory):
     files = []
