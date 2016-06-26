@@ -78,7 +78,6 @@ try:
 
                 producers.append(file)
                 file_to_name[file] = address_to_name[producer_address]
-                queues = {}
             else:
                 producer_name = file_to_name[to_read]
                 try:

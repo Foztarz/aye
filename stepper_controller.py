@@ -38,7 +38,6 @@ class StepperController:
         time.sleep(self.step_delay_seconds)
 
         if self.sensor_on():
-            #print("[%s] end of movement reached at %f" % (self.name, self.degrees()))
             return False
 
         return True
