@@ -1,5 +1,7 @@
 from panorama_control import PanoramaControl
 
+millis = lambda: int(round(time.time() * 1000))
+
 class PanoramaOrchestrator:
     address_to_name = {
         '172.24.1.91' : 'pol-0',
@@ -27,33 +29,38 @@ class PanoramaOrchestrator:
                             [], # potential writers
                             [], # potential errors
                             60) 
-         for to_read in ready_to_read:
-            if to_read is tcp_socket:
-                connection, address = tcp_socket.accept()
-                producer_address = address[0]
-                print("New connection from %s (%s)" % (producer_address, address_to_name[producer_address]))
-                file = connection.makefile('rb')
-                file.write(struct.pack('<Q', millis()))
-                file.flush()
+            for to_read in ready_to_read:
+                if to_read is tcp_socket:
+                    connection, address = tcp_socket.accept()
+                    producer_address = address[0]
+                    print("New connection from %s (%s)" % (producer_address, address_to_name[producer_address]))
+                    file = connection.makefile('rb')
+                    file.write(struct.pack('<Q', millis()))
+                    file.flush()
 
-                self.producers.append(file)
-                self.file_to_name[file] = self.address_to_name[producer_address]
-            else:
-                producer_name = file_to_name[to_read]
-                try:
-                    image, timestamp = consume(to_read)
-                except Exception, message:
-                    print "Exception consuming %s" % producer_name, message
-                    continue
+                    self.producers.append(file)
+                    self.file_to_name[file] = self.address_to_name[producer_address]
+                else:
+                    producer_name = file_to_name[to_read]
+                    try:
+                        image, timestamp = consume(to_read)
+                    except Exception, message:
+                        print "Exception consuming %s" % producer_name, message
+                        continue
 
-                if image is None:
-                    print("Image from %s is None" % producer_name)
-                    continue
+                    if image is None:
+                        print("Image from %s is None" % producer_name)
+                        continue
 
-                cv2.imshow(producer_name, image)
-                key = cv2.waitKey(1) & 0xFF
-                if key == 'N':
-                    break
+                    cv2.imshow(producer_name, image)
+                    key = cv2.waitKey(1) & 0xFF
+                    if len(self.producers) == len(self.address_to_name.keys()):
+                        break
+
+        print "Waiting for N..."
+        key = cv2.waitKey(0)
+        if key == 'N':
+            break
 
     def capture(self):
         panorama_control = PanoramaControl()
@@ -61,7 +68,6 @@ class PanoramaOrchestrator:
         while panorama_control.step():
             status = panorama_control.status()
             image_id = 'panorama-%s' % '-'.join(map(str, status))
-            # size of image_id should be constant 
             for producer in producers:
                 producer_name = file_to_name[producer]
                 success = False
@@ -81,6 +87,7 @@ class PanoramaOrchestrator:
                 if not success:
                     print('Failed to contact producer %s. Panorama capture failed at %s.' % (producer_name, image_id))
 
+        producer.write(struct.pack('<Q', -1))
         print "Panorama capture complete"
 
     def consume(file):
