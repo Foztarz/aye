@@ -23,6 +23,16 @@ def timestamp(dt):
 def timestamp_from_millis(millis):
     return timestamp(datetime.datetime.fromtimestamp(millis/1000))
 
+def cv2_from_bytes(image_bytes):
+    image_stream = io.BytesIO()
+    image_stream.write(image_bytes)
+
+    image_stream.seek(0)
+    data = np.fromstring(image_stream.getvalue(), dtype=np.uint8)
+    image = cv2.imdecode(data, 1)
+
+    return image
+
 class PanoramaImageProducer:
     def __init__(self):
         self.camera = PiCamera()
@@ -45,9 +55,12 @@ class PanoramaImageProducer:
         self.directory = "%s/%s-%s" % (WORKING_DIRECTORY, HOSTNAME, timestamp_from_millis(millis))
         os.makedirs(self.directory)
 
-        image = self.capture()
-        self.consumer.write(struct.pack('<L', len(image)))
-        self.consumer.write(image)
+        image_bytes = self.capture()
+        image = cv2_from_bytes(image_bytes)
+        smaller_image = cv2.resize(image, (320, 240)) 
+        smaller_image_bytes = cv2.encode('.jpg', smaller_image)[1].tostring()
+        self.consumer.write(struct.pack('<L', len(smaller_image_bytes)))
+        self.consumer.write(smaller_image_bytes)
         self.consumer.flush()
 
         self.save(image, "test", self.directory)
