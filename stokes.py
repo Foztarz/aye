@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def getStokes(gray0, gray45, gray90):
     #convert grays to signed double (int16)
     gray0_d=np.int16(gray0)

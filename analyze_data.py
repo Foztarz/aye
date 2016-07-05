@@ -1,10 +1,11 @@
 import os
-from operator import itemgetter
+from operator import itemgetter, methodcaller
 import ipdb
 import cv2
 import stokes
 import numpy as np
 import aye_utils
+import rpi_raw
 
 DATA_DIRECTORY = os.path.expanduser("~/aye-data/")
 SYNCHRONIZED_THRESHOLD_MS = 30
@@ -103,7 +104,7 @@ def synchronize(directories0n45n90):
                 for late_key, _ in late_heads:
                     queues[late_key] = queues[late_key][1:]
 
-            print positions
+            print(positions)
             #print zip(queues.keys(), map(len, queues.values()))
             if max(map(len, queues.values())) > 500:
                 print("Queues are too big, emptying them to prevent memory freeze")
@@ -137,21 +138,74 @@ def interactive():
 
 gray0, gray45, gray90, stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = None, None, None, None, None, None, None, None, None
 
+def gray(image):
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+def small(image):
+    return cv2.resize(image, (1280, 960))
+
 def display(data):
     global gray0, gray45, gray90, stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP
-    gray0 = cv2.cvtColor(data[0][1], cv2.COLOR_BGR2GRAY)
-    gray45 = cv2.cvtColor(data[1][1], cv2.COLOR_BGR2GRAY)
-    gray90 = cv2.cvtColor(data[2][1], cv2.COLOR_BGR2GRAY)
+    gray0 = gray(data[0][1])
+    gray45 = gray(data[1][1])
+    gray90 = gray(data[2][1])
     stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(gray0, gray45, gray90)
     cv2.imshow('stokes-i', aye_utils.normalized_uint8(stokesI, 500))
     cv2.imshow('stokes-q', aye_utils.normalized_uint8(stokesQ, 255))
     cv2.imshow('stokes-u', aye_utils.normalized_uint8(stokesU, 255))
     cv2.imshow('linear-intensity', aye_utils.normalized_uint8(polInt, 255))
     cv2.imshow('linear-degree', polDoLP)
-    H = np.uint8((polAoP+(3.1416/2))*(180/3.1416))
-    S = 255*np.ones((240,320), 'uint8')
-    V = 255*np.ones((240,320), 'uint8')
-    cv2.imshow('angle', cv2.cvtColor(cv2.merge([H,S,V]), cv2.COLOR_HSV2BGR))
+    cv2.imshow('angle', cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR))
 
     cv2.imshow('hsv', cv2.cvtColor(cv2.merge(stokes.toHSV(polInt, polDoLP, polAoP)), cv2.COLOR_HSV2BGR))
 
+def save_stokes(stokesI, stokesQ, stokesU):
+    dir = 'stokes'
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
+
+    cv2.imwrite('/'.join([dir, 'stokes-i.png']), stokesI)
+    cv2.imwrite('/'.join([dir, 'stokes-q.png']), stokesQ)
+    cv2.imwrite('/'.join([dir, 'stokes-u.png']), stokesU)
+
+# assumes only one file per polarization orientation in the directory
+def visualize(directory, use_raw=True):
+    pol_files = filter(lambda f: 'pol' in f, get_files_in_directory(directory))
+    assert len(list(pol_files)) == 3
+
+    orientation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_orientation, pol_files), pol_files)))
+
+    if use_raw:
+        images = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), orientation_sorted_pol_files))
+    else: 
+        images = map(cv2.imread, orientation_sorted_pol_files)
+
+    orientation_sorted_grays = map(small, map(gray, images))
+
+    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(orientation_sorted_grays[0], orientation_sorted_grays[1], orientation_sorted_grays[2])
+
+    normalized_stokesI = aye_utils.normalized_uint8(stokesI, 500)
+    normalized_stokesQ = aye_utils.normalized_uint8(stokesQ, 255)
+    normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
+    save_stokes(normalized_stokesI, normalized_stokesQ, normalized_stokesU)
+
+    cv2.imshow('stokes-i', normalized_stokesI)
+    cv2.imshow('stokes-q', normalized_stokesQ)
+    cv2.imshow('stokes-u', normalized_stokesU)
+    cv2.imshow('angle', cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR))
+
+def file_to_png(file_path):
+    image = cv2.imread(file_path)
+    cv2.imwrite(os.path.splitext(file_path)[0] + '.png', image)
+
+def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False):
+    image = rpi_raw.from_raw_jpeg(file_path).demosaic()
+    if to_small:
+        image = small(image)
+    if to_gray:
+        image = gray(image)
+
+    if out:
+        cv2.imwrite(out, image)
+    else:
+        cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
