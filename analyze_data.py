@@ -16,9 +16,8 @@ def get_files_in_directory(directory):
 
     return files
 
-def get_sequence_directories():
-    print "Looking in ", DATA_DIRECTORY
-    sequence_directories = filter(os.path.isdir, get_files_in_directory(DATA_DIRECTORY))
+def get_sequence_directories(directory = DATA_DIRECTORY):
+    sequence_directories = filter(os.path.isdir, get_files_in_directory(directory))
 
     return sequence_directories
 
