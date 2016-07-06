@@ -6,6 +6,7 @@ import stokes
 import numpy as np
 import aye_utils
 import rpi_raw
+import sys
 
 DATA_DIRECTORY = os.path.expanduser("~/aye-data/")
 SYNCHRONIZED_THRESHOLD_MS = 30
@@ -142,7 +143,7 @@ def gray(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 def small(image):
-    return cv2.resize(image, (1280, 960))
+    return cv2.resize(image, (480, 360))
 
 def display(data):
     global gray0, gray45, gray90, stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP
@@ -168,10 +169,29 @@ def save_stokes(stokesI, stokesQ, stokesU):
     cv2.imwrite('/'.join([dir, 'stokes-q.png']), stokesQ)
     cv2.imwrite('/'.join([dir, 'stokes-u.png']), stokesU)
 
+def display_stokes(images):
+    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(images[0], images[1], images[2])
+
+    normalized_stokesI = aye_utils.normalized_uint8(stokesI, 500)
+    normalized_stokesQ = aye_utils.normalized_uint8(stokesQ, 255)
+    normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
+    save_stokes(normalized_stokesI, normalized_stokesQ, normalized_stokesU)
+
+    cv2.imshow('0', images[0])
+    cv2.imshow('45', images[1])
+    cv2.imshow('90', images[2])
+    cv2.imshow('stokes-i', normalized_stokesI)
+    cv2.imshow('stokes-q', normalized_stokesQ)
+    cv2.imshow('stokes-u', normalized_stokesU)
+    cv2.imshow('angle', cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR))
+
 # assumes only one file per polarization orientation in the directory
 def visualize(directory, use_raw=True):
     pol_files = filter(lambda f: 'pol' in f, get_files_in_directory(directory))
-    assert len(list(pol_files)) == 3
+    files_length = len(list(pol_files))
+    data_points = files_length / 3
+    assert files_length % 3 == 0 and files_length > 0, "Number of files in folder should be divisible by 3"
+    print('%d data points' % data_points)
 
     orientation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_orientation, pol_files), pol_files)))
 
@@ -180,19 +200,21 @@ def visualize(directory, use_raw=True):
     else: 
         images = map(cv2.imread, orientation_sorted_pol_files)
 
-    orientation_sorted_grays = map(small, map(gray, images))
+    small_gray = list(map(small, map(gray, images)))
 
-    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(orientation_sorted_grays[0], orientation_sorted_grays[1], orientation_sorted_grays[2])
+    small_gray0 = small_gray[:data_points]
+    small_gray45 = small_gray[data_points:2*data_points]
+    small_gray90 = small_gray[2*data_points:]
+    zipped_orientation_images = zip(small_gray0, small_gray45, small_gray90)
 
-    normalized_stokesI = aye_utils.normalized_uint8(stokesI, 500)
-    normalized_stokesQ = aye_utils.normalized_uint8(stokesQ, 255)
-    normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
-    save_stokes(normalized_stokesI, normalized_stokesQ, normalized_stokesU)
+    display = lambda data_index: display_stokes(zipped_orientation_images[data_index])
+    cv2.namedWindow('control')
+    cv2.createTrackbar('Data Index', 'control', 0, data_points, display)
+    while (1):
+        k = cv2.waitKey() & 0xFF
 
-    cv2.imshow('stokes-i', normalized_stokesI)
-    cv2.imshow('stokes-q', normalized_stokesQ)
-    cv2.imshow('stokes-u', normalized_stokesU)
-    cv2.imshow('angle', cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR))
+        if k == 27:
+            break
 
 def file_to_png(file_path):
     image = cv2.imread(file_path)
@@ -209,3 +231,6 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(out, image)
     else:
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
+
+if __name__ == '__main__':
+    visualize(sys.argv[1], False)
