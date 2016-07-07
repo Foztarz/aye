@@ -8,6 +8,7 @@ import aye_utils
 import rpi_raw
 import sys
 
+SUFFIX = 'aye-analyze'
 DATA_DIRECTORY = os.path.expanduser("~/aye-data/")
 SYNCHRONIZED_THRESHOLD_MS = 30
 
@@ -169,6 +170,9 @@ def save_stokes(stokesI, stokesQ, stokesU):
     cv2.imwrite('/'.join([dir, 'stokes-q.png']), stokesQ)
     cv2.imwrite('/'.join([dir, 'stokes-u.png']), stokesU)
 
+def suffixed(str):
+    return "%s-%s" % (str, SUFFIX)
+
 def display_stokes(images):
     stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(images[0], images[1], images[2])
 
@@ -177,39 +181,105 @@ def display_stokes(images):
     normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
     save_stokes(normalized_stokesI, normalized_stokesQ, normalized_stokesU)
 
-    cv2.imshow('0', images[0])
-    cv2.imshow('45', images[1])
-    cv2.imshow('90', images[2])
-    cv2.imshow('stokes-i', normalized_stokesI)
-    cv2.imshow('stokes-q', normalized_stokesQ)
-    cv2.imshow('stokes-u', normalized_stokesU)
-    cv2.imshow('angle', cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR))
+    cv2.imshow(suffixed('0'), images[0])
+    cv2.imshow(suffixed('45'), images[1])
+    cv2.imshow(suffixed('90'), images[2])
+    cv2.imshow(suffixed('stokes-i'), normalized_stokesI)
+    cv2.imshow(suffixed('stokes-q'), normalized_stokesQ)
+    cv2.imshow(suffixed('stokes-u'), normalized_stokesU)
+    angle_image = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR) 
+    cv2.imshow(suffixed('angle'), angle_image)
+
+    angle_in_degrees = stokes.angle_to_hue(polAoP)
+
+    line_width = 100
+    # TODO Sample region not just one point
+    # TODO do it for multiple regions not just center
+    middle_point = (angle_in_degrees.shape[1]/2,angle_in_degrees.shape[0]/2)
+    line_point1 = np.array(middle_point)
+    line_point2 = np.array(middle_point)
+
+    angle_at_center_degrees = angle_in_degrees[middle_point]
+    angle_at_center_rad = np.deg2rad(angle_at_center_degrees)
+    print "Angle at center %d %f" % (angle_at_center_degrees, angle_at_center_rad)
+
+    line_point1 = np.sum([line_point1, (np.cos(angle_at_center_rad)*line_width/2, np.sin(angle_at_center_rad)*line_width/2)], 0).astype(int)
+    line_point2 = np.sum([line_point2, (np.cos(angle_at_center_rad+np.pi)*line_width/2, np.sin(angle_at_center_rad+np.pi)*line_width/2)], 0).astype(int)
+    
+    angle_image_with_line = cv2.arrowedLine(angle_image, tuple(line_point1), tuple(line_point2), (0,0,0))
+
+    #cv2.imshow(suffixed('angle-downsampled'), small(cv2.pyrDown(cv2.pyrDown(angle_image))))
+    cv2.imshow(suffixed('angle-with-line'), angle_image_with_line)
+
+def parse_zenith_time(file_path):
+    time_text = os.path.split(file_path)[-1].split('-')[-1]
+    hours = int(time_text.split(':')[0])
+    minutes = int(time_text.split(':')[1])
+    return hours*60 + minutes
+
+def minutes_to_hour_minutes(minutes):
+    return '%d:%02d' % (minutes/60, minutes % 60)
+
+def update_control_view(minutes, rotation):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    img = np.zeros((480, 320))
+    cv2.putText(img, minutes_to_hour_minutes(minutes), (10,25), font, 1, (255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img, str(rotation), (10,50), font, 1, (255,255,255),2,cv2.LINE_AA)
+    cv2.imshow(suffixed('control'), img)
+
+def parse_rotation(sevilla_zenith_image_path):
+    return int(os.path.split(sevilla_zenith_image_path)[-1].split('-')[4])
 
 # assumes only one file per polarization orientation in the directory
-def visualize(directory, use_raw=True):
-    pol_files = filter(lambda f: 'pol' in f, get_files_in_directory(directory))
-    files_length = len(list(pol_files))
-    data_points = files_length / 3
-    assert files_length % 3 == 0 and files_length > 0, "Number of files in folder should be divisible by 3"
-    print('%d data points' % data_points)
+def visualize_sevilla_zenith(directory, use_raw=True, first=None):
+    zenith_times = filter(lambda f: 'azim' in f, get_files_in_directory(directory))
+    zenith_times = map(itemgetter(1), sorted(zip(map(parse_zenith_time, zenith_times), zenith_times)))
+    zenith_time_rotation = []
+    time_points = len(list(zenith_times))
+    print('%d time points' % time_points)
+    max_data_points = 0
+    count = 0
+    for zenith_time in  zenith_times:
+        pol_files = filter(lambda f: 'pol' in f, get_files_in_directory(zenith_time))
+        files_length = len(list(pol_files))
+        data_points = files_length / 3
+        if files_length % 3 != 0 or files_length == 0:
+            print("Number of files in folder should be divisible by 3 : %s"% zenith_time)
+            continue
 
-    orientation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_orientation, pol_files), pol_files)))
+        max_data_points = max(data_points, max_data_points)
+        print('%d rotation points' % data_points)
 
-    if use_raw:
-        images = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), orientation_sorted_pol_files))
-    else: 
-        images = map(cv2.imread, orientation_sorted_pol_files)
+        rotation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_rotation, pol_files), pol_files)))
+        rotation_sorted_pol_0 = filter(lambda a: parse_orientation(a) == 0, rotation_sorted_pol_files)
+        rotation_sorted_pol_45 = filter(lambda a: parse_orientation(a) == 45, rotation_sorted_pol_files)
+        rotation_sorted_pol_90 = filter(lambda a: parse_orientation(a) == 90, rotation_sorted_pol_files)
 
-    small_gray = list(map(small, map(gray, images)))
+        if use_raw:
+            images0 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_0))
+            images45 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_45))
+            images90 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_90))
+        else: 
+            images0 = map(cv2.imread, rotation_sorted_pol_0)
+            images45 = map(cv2.imread, rotation_sorted_pol_45)
+            images90 = map(cv2.imread, rotation_sorted_pol_90)
 
-    small_gray0 = small_gray[:data_points]
-    small_gray45 = small_gray[data_points:2*data_points]
-    small_gray90 = small_gray[2*data_points:]
-    zipped_orientation_images = zip(small_gray0, small_gray45, small_gray90)
+        small_gray0, small_gray45, small_gray90 = map(lambda i: map(small, map(gray, i)), [images0, images45, images90])
+        assert map(parse_rotation, rotation_sorted_pol_0) == map(parse_rotation, rotation_sorted_pol_45)
+        assert map(parse_rotation, rotation_sorted_pol_0) == map(parse_rotation, rotation_sorted_pol_90)
+        zipped_rotation_images = zip(map(parse_rotation, rotation_sorted_pol_0), zip(small_gray0, small_gray45, small_gray90))
+        zenith_time_rotation.append(zipped_rotation_images)
 
-    display = lambda data_index: display_stokes(zipped_orientation_images[data_index])
-    cv2.namedWindow('control')
-    cv2.createTrackbar('Data Index', 'control', 0, data_points, display)
+        count = count + 1
+        if first and first <= count:
+            break
+
+    display_trackbar = lambda _: display(cv2.getTrackbarPos('Time Index', suffixed('control')), cv2.getTrackbarPos('Rotation Index', suffixed('control')))
+    display = lambda time_index, rotation_index: update_control_view(parse_zenith_time(zenith_times[time_index]), zenith_time_rotation[time_index][rotation_index][0]) or display_stokes(zenith_time_rotation[time_index][rotation_index][1])
+
+    cv2.namedWindow(suffixed('control'))
+    cv2.createTrackbar('Time Index', suffixed('control'), 0, time_points, display_trackbar)
+    cv2.createTrackbar('Rotation Index', suffixed('control'), 0, max_data_points, display_trackbar)
     while (1):
         k = cv2.waitKey() & 0xFF
 
@@ -233,4 +303,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
 
 if __name__ == '__main__':
-    visualize(sys.argv[1], False)
+    visualize_sevilla_zenith(sys.argv[1], False)
