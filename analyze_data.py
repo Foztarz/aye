@@ -173,6 +173,29 @@ def save_stokes(stokesI, stokesQ, stokesU):
 def suffixed(str):
     return "%s-%s" % (str, SUFFIX)
 
+def point_on_circle(rad, radius):
+    return (np.sin(rad)*radius, np.cos(rad)*radius)
+
+def pointed_line(angle_deg, x, y, line_length):
+    line_point1 = np.array((x,y))
+    line_point2 = np.array((x,y))
+
+    angle_rad = np.deg2rad(angle_deg)
+
+    line_point1 = np.sum([line_point1, point_on_circle(angle_rad, line_length/2)], 0).astype(int)
+    line_point2 = np.sum([line_point2, point_on_circle(angle_rad+np.pi, line_length/2)], 0).astype(int)
+    
+    return line_point1, line_point2
+
+class PixelInfo:
+    def __init__(self, named_images):
+        self.named_images = named_images
+
+    def output(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            for name, image in self.named_images:
+                print("[%s] %s" % (name, image[(y,x)]))
+
 def display_stokes(images):
     stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(images[0], images[1], images[2])
 
@@ -184,32 +207,35 @@ def display_stokes(images):
     cv2.imshow(suffixed('0'), images[0])
     cv2.imshow(suffixed('45'), images[1])
     cv2.imshow(suffixed('90'), images[2])
-    cv2.imshow(suffixed('stokes-i'), normalized_stokesI)
+    #cv2.imshow(suffixed('stokes-i'), normalized_stokesI)
+    cv2.imshow(suffixed('linear-degree'), polDoLP)
     cv2.imshow(suffixed('stokes-q'), normalized_stokesQ)
     cv2.imshow(suffixed('stokes-u'), normalized_stokesU)
     angle_image = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR) 
     cv2.imshow(suffixed('angle'), angle_image)
 
+
     angle_in_degrees = stokes.angle_to_hue(polAoP)
+    downsample = 30
+    angle_in_degrees_downsampled = small(angle_in_degrees[::downsample, ::downsample])
+    angle_image_downsampled = small(angle_image[::downsample, ::downsample])
 
-    line_width = 100
-    # TODO Sample region not just one point
-    # TODO do it for multiple regions not just center
-    middle_point = (angle_in_degrees.shape[1]/2,angle_in_degrees.shape[0]/2)
-    line_point1 = np.array(middle_point)
-    line_point2 = np.array(middle_point)
+    width = angle_in_degrees.shape[0]
+    height = angle_in_degrees.shape[1]
+    sample_step = min(width, height)/downsample
 
-    angle_at_center_degrees = angle_in_degrees[middle_point]
-    angle_at_center_rad = np.deg2rad(angle_at_center_degrees)
-    print "Angle at center %d %f" % (angle_at_center_degrees, angle_at_center_rad)
-
-    line_point1 = np.sum([line_point1, (np.cos(angle_at_center_rad)*line_width/2, np.sin(angle_at_center_rad)*line_width/2)], 0).astype(int)
-    line_point2 = np.sum([line_point2, (np.cos(angle_at_center_rad+np.pi)*line_width/2, np.sin(angle_at_center_rad+np.pi)*line_width/2)], 0).astype(int)
-    
-    angle_image_with_line = cv2.arrowedLine(angle_image, tuple(line_point1), tuple(line_point2), (0,0,0))
+    angle_image_with_lines = angle_image_downsampled
+    for x in range(sample_step, width, sample_step):
+        for y in range(sample_step, height, sample_step):
+            point1, point2 = pointed_line(angle_in_degrees_downsampled[(x,y)], x, y, sample_step - 3)
+            angle_image_with_lines = cv2.arrowedLine(angle_image_with_lines, tuple(point1[::-1]), tuple(point2[::-1]), (0,0,0))
 
     #cv2.imshow(suffixed('angle-downsampled'), small(cv2.pyrDown(cv2.pyrDown(angle_image))))
-    cv2.imshow(suffixed('angle-with-line'), angle_image_with_line)
+    cv2.imshow(suffixed('angle-with-lines'), angle_image_with_lines)
+
+    pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP)]) 
+    cv2.setMouseCallback(suffixed('angle-with-lines'), pixel_info.output)
+    cv2.setMouseCallback(suffixed('linear-degree'), pixel_info.output)
 
 def parse_zenith_time(file_path):
     time_text = os.path.split(file_path)[-1].split('-')[-1]
@@ -230,16 +256,19 @@ def update_control_view(minutes, rotation):
 def parse_rotation(sevilla_zenith_image_path):
     return int(os.path.split(sevilla_zenith_image_path)[-1].split('-')[4])
 
-# assumes only one file per polarization orientation in the directory
-def visualize_sevilla_zenith(directory, use_raw=True, first=None):
+def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None):
     zenith_times = filter(lambda f: 'azim' in f, get_files_in_directory(directory))
     zenith_times = map(itemgetter(1), sorted(zip(map(parse_zenith_time, zenith_times), zenith_times)))
     zenith_time_rotation = []
     time_points = len(list(zenith_times))
     print('%d time points' % time_points)
     max_data_points = 0
-    count = 0
+    count = -1
     for zenith_time in  zenith_times:
+        count = count + 1
+        if first and first > count:
+            zenith_time_rotation.append([])
+            continue
         pol_files = filter(lambda f: 'pol' in f, get_files_in_directory(zenith_time))
         files_length = len(list(pol_files))
         data_points = files_length / 3
@@ -270,8 +299,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None):
         zipped_rotation_images = zip(map(parse_rotation, rotation_sorted_pol_0), zip(small_gray0, small_gray45, small_gray90))
         zenith_time_rotation.append(zipped_rotation_images)
 
-        count = count + 1
-        if first and first <= count:
+        if last and last <= count:
             break
 
     display_trackbar = lambda _: display(cv2.getTrackbarPos('Time Index', suffixed('control')), cv2.getTrackbarPos('Rotation Index', suffixed('control')))
@@ -303,4 +331,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
 
 if __name__ == '__main__':
-    visualize_sevilla_zenith(sys.argv[1], False)
+    visualize_sevilla_zenith(sys.argv[1], False, first=11, last=15)
