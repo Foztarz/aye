@@ -216,13 +216,14 @@ def display_stokes(images):
 
 
     angle_in_degrees = stokes.angle_to_hue(polAoP)
-    downsample = 30
-    angle_in_degrees_downsampled = small(angle_in_degrees[::downsample, ::downsample])
-    angle_image_downsampled = small(angle_image[::downsample, ::downsample])
+    downsample = 15
+    polAoP_downsampled = small(polAoP[::downsample, ::downsample])
+    angle_image_downsampled = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP_downsampled)), cv2.COLOR_HSV2BGR) 
+    angle_in_degrees_downsampled = stokes.angle_to_hue(polAoP_downsampled)
 
     width = angle_in_degrees.shape[0]
     height = angle_in_degrees.shape[1]
-    sample_step = min(width, height)/downsample
+    sample_step = downsample
 
     angle_image_with_lines = angle_image_downsampled
     for x in range(sample_step, width, sample_step):
@@ -230,10 +231,9 @@ def display_stokes(images):
             point1, point2 = pointed_line(angle_in_degrees_downsampled[(x,y)], x, y, sample_step - 3)
             angle_image_with_lines = cv2.arrowedLine(angle_image_with_lines, tuple(point1[::-1]), tuple(point2[::-1]), (0,0,0))
 
-    #cv2.imshow(suffixed('angle-downsampled'), small(cv2.pyrDown(cv2.pyrDown(angle_image))))
     cv2.imshow(suffixed('angle-with-lines'), angle_image_with_lines)
 
-    pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP)]) 
+    pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP), ('angle-raw', polAoP_downsampled)]) 
     cv2.setMouseCallback(suffixed('angle-with-lines'), pixel_info.output)
     cv2.setMouseCallback(suffixed('linear-degree'), pixel_info.output)
 
@@ -308,6 +308,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None):
     cv2.namedWindow(suffixed('control'))
     cv2.createTrackbar('Time Index', suffixed('control'), 0, time_points, display_trackbar)
     cv2.createTrackbar('Rotation Index', suffixed('control'), 0, max_data_points, display_trackbar)
+
     while (1):
         k = cv2.waitKey() & 0xFF
 
@@ -331,4 +332,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
 
 if __name__ == '__main__':
-    visualize_sevilla_zenith(sys.argv[1], False, first=11, last=15)
+    visualize_sevilla_zenith(sys.argv[1], False, first=11)
