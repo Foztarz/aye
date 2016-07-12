@@ -332,4 +332,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
 
 if __name__ == '__main__':
-    visualize_sevilla_zenith(sys.argv[1], False, first=11)
+    visualize_sevilla_zenith(sys.argv[1], False)

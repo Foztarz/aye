@@ -41,14 +41,14 @@ def copy_contents_without_test(from_directory, to_directory):
 for sequence_directory in analyze_data.get_sequence_directories(from_directory):
     label = parse_label(sequence_directory)
     if label is None or label == "": 
-        print "Ignoring %s" % sequence_directory
+        print("Ignoring %s" % sequence_directory)
         continue
 
     group_directory = '/'.join([to_directory, label])
     if not os.path.isdir(to_directory):
         os.makedirs(to_directory)
     count = copy_contents_without_test(sequence_directory, group_directory)
-    print "Grouped %d contents of %s into %s" % (count, sequence_directory, group_directory)
+    print("Grouped %d contents of %s into %s" % (count, sequence_directory, group_directory))
 
 
 
