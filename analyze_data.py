@@ -174,7 +174,7 @@ def suffixed(str):
     return "%s-%s" % (str, SUFFIX)
 
 def point_on_circle(rad, radius):
-    return (np.sin(rad)*radius, np.cos(rad)*radius)
+    return (np.cos(rad + np.pi/2)*radius , np.sin(rad + np.pi/2)*radius)
 
 def pointed_line(angle_deg, x, y, line_length):
     line_point1 = np.array((x,y))
@@ -182,8 +182,8 @@ def pointed_line(angle_deg, x, y, line_length):
 
     angle_rad = np.deg2rad(angle_deg)
 
-    line_point1 = np.sum([line_point1, point_on_circle(angle_rad, line_length/2)], 0).astype(int)
-    line_point2 = np.sum([line_point2, point_on_circle(angle_rad+np.pi, line_length/2)], 0).astype(int)
+    line_point1 = np.sum([line_point1, point_on_circle(angle_rad-np.pi, line_length/2)], 0).astype(int)
+    line_point2 = np.sum([line_point2, point_on_circle(angle_rad, line_length/2)], 0).astype(int)
     
     return line_point1, line_point2
 
@@ -196,7 +196,15 @@ class PixelInfo:
             for name, image in self.named_images:
                 print("[%s] %s" % (name, image[(y,x)]))
 
-def display_stokes(images):
+def sunny(image, sun_at_degrees):
+    middle = np.array(image.shape[:2]) / 2
+    sun_orbit_radius = np.min(middle) - 50
+    sun_position = point_on_circle(np.deg2rad(sun_at_degrees), sun_orbit_radius) + middle
+    return cv2.circle(image, tuple(sun_position.astype(int)[::-1]), 20, (255, 255, 0), -1)
+
+
+def display_stokes(rotation_images):
+    rotation, images = rotation_images
     stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(images[0], images[1], images[2])
 
     normalized_stokesI = aye_utils.normalized_uint8(stokesI, 500)
@@ -207,13 +215,11 @@ def display_stokes(images):
     cv2.imshow(suffixed('0'), images[0])
     cv2.imshow(suffixed('45'), images[1])
     cv2.imshow(suffixed('90'), images[2])
-    #cv2.imshow(suffixed('stokes-i'), normalized_stokesI)
     cv2.imshow(suffixed('linear-degree'), polDoLP)
     cv2.imshow(suffixed('stokes-q'), normalized_stokesQ)
     cv2.imshow(suffixed('stokes-u'), normalized_stokesU)
     angle_image = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR) 
     cv2.imshow(suffixed('angle'), angle_image)
-
 
     angle_in_degrees = stokes.angle_to_hue(polAoP)
     downsample = 15
@@ -230,6 +236,9 @@ def display_stokes(images):
         for y in range(sample_step, height, sample_step):
             point1, point2 = pointed_line(angle_in_degrees_downsampled[(x,y)], x, y, sample_step - 3)
             angle_image_with_lines = cv2.arrowedLine(angle_image_with_lines, tuple(point1[::-1]), tuple(point2[::-1]), (0,0,0))
+
+    system_orientation_sun_starting_angle = 110
+    angle_image_with_lines_and_sun = sunny(angle_image_with_lines, system_orientation_sun_starting_angle + rotation)
 
     cv2.imshow(suffixed('angle-with-lines'), angle_image_with_lines)
 
@@ -303,7 +312,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None):
             break
 
     display_trackbar = lambda _: display(cv2.getTrackbarPos('Time Index', suffixed('control')), cv2.getTrackbarPos('Rotation Index', suffixed('control')))
-    display = lambda time_index, rotation_index: update_control_view(parse_zenith_time(zenith_times[time_index]), zenith_time_rotation[time_index][rotation_index][0]) or display_stokes(zenith_time_rotation[time_index][rotation_index][1])
+    display = lambda time_index, rotation_index: update_control_view(parse_zenith_time(zenith_times[time_index]), zenith_time_rotation[time_index][rotation_index][0]) or display_stokes(zenith_time_rotation[time_index][rotation_index])
 
     cv2.namedWindow(suffixed('control'))
     cv2.createTrackbar('Time Index', suffixed('control'), 0, time_points, display_trackbar)
@@ -332,4 +341,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
         cv2.imwrite(os.path.splitext(file_path)[0] + ext, image)
 
 if __name__ == '__main__':
-    visualize_sevilla_zenith(sys.argv[1], False)
+    visualize_sevilla_zenith(sys.argv[1], False, first=11, last=20)
