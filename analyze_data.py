@@ -120,7 +120,7 @@ def with_evectors_and_sun(pol_angle_radians, rotation):
     system_orientation_sun_starting_angle = 110
     angle_image_with_lines_and_sun = sunny(angle_image_with_lines, system_orientation_sun_starting_angle + rotation)
 
-    return angle_image_with_lines_and_sun
+    return angle_image_with_lines_and_sun, angle_in_degrees_downsampled
 
 def display_labeled_images(labeled_images):
     global show_subset
@@ -129,31 +129,58 @@ def display_labeled_images(labeled_images):
         if not show_subset or label in labels_subset:
             cv2.imshow(suffixed(label), image)
 
-def display_stokes(time_rotation_images, save_directory = None):
-    (time, rotation), images = time_rotation_images
+def shift45(rotation_images):
+    starting_rotation = rotation_images[0][0][1]
 
-    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(images[0], images[1], images[2])
+    cutoff = -1
+    for index, ((time, rotation), image) in enumerate(rotation_images):
+        if abs(rotation - starting_rotation - 45) <= 5:
+            cutoff = index
+            break
+
+    if cutoff == -1:
+        ipdb.set_trace()
+    assert cutoff is not -1, "Could not shift 45"
+
+    return rotation_images[cutoff:]
+
+def monocular(rotation_images):
+    rotation_images0 = rotation_images
+    rotation_images45 = shift45(rotation_images0)
+    rotation_images90 = shift45(rotation_images45)
+
+    return zip(rotation_images0, rotation_images45, rotation_images90)
+
+def display_stokes(time_rotation_images, save_directory = None):
+    ((time0, rotation0), image0),((time45, rotation45), image45),((time90, rotation90), image90) = time_rotation_images
+
+    assert time0 == time45 and time45 == time90
+
+    time = time0
+
+    images = [image0, image45, image90]
+
+    stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP = stokes.getStokes(image0, image45, image90)
 
     normalized_stokesI = aye_utils.normalized_uint8(stokesI, 500)
     normalized_stokesQ = aye_utils.normalized_uint8(stokesQ, 255)
     normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
     angle_image = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR) 
-    angle_evectors = with_evectors_and_sun(polAoP, rotation)
+    angle_evectors, angle_in_degrees_downsampled = with_evectors_and_sun(polAoP, rotation0)
 
     normalized_degree = aye_utils.normalized_uint8(polDoLP, 1)
     normalized_angle = aye_utils.normalized_uint8(angle_image, 1)
     normalized_angle_evectors = aye_utils.normalized_uint8(angle_evectors, 1)
 
-
     labels = ['0', '45', '90', 'linear-degree', 'stokes-q', 'stokes-u', 'angle', 'angle-evectors']
     labeled_images = zip(labels, [images[0], images[1], images[2], normalized_degree, normalized_stokesQ, normalized_stokesU, normalized_angle, normalized_angle_evectors])
 
     if save_directory:
-        save_labeled_images(time, rotation, labeled_images, save_directory)
+        save_labeled_images(time, rotation0, labeled_images, save_directory)
     else:
-        update_control_view(time, rotation)
+        update_control_view(time, rotation0, rotation45, rotation90)
         display_labeled_images(labeled_images)
-        pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP), ('angle-raw', polAoP_downsampled)]) 
+        pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP)]) 
         cv2.setMouseCallback(suffixed('angle-with-lines'), pixel_info.output)
         cv2.setMouseCallback(suffixed('linear-degree'), pixel_info.output)
 
@@ -166,11 +193,13 @@ def parse_zenith_time(file_path):
 def minutes_to_hour_minutes(minutes):
     return '%d:%02d' % (minutes/60, minutes % 60)
 
-def update_control_view(minutes, rotation):
+def update_control_view(minutes, rotation0, rotation45, rotation90):
     font = cv2.FONT_HERSHEY_SIMPLEX
     img = np.zeros((480, 320))
     cv2.putText(img, minutes_to_hour_minutes(minutes), (10,25), font, 1, (255,255,255),2,cv2.LINE_AA)
-    cv2.putText(img, str(rotation), (10,50), font, 1, (255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img, str(rotation0), (10,50), font, 1, (255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img, str(rotation45), (10,75), font, 1, (255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img, str(rotation90), (10,100), font, 1, (255,255,255),2,cv2.LINE_AA)
     cv2.imshow(suffixed('control'), img)
 
 def parse_rotation(sevilla_zenith_image_path):
@@ -203,24 +232,16 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
 
         rotation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_rotation, pol_files), pol_files)))
         rotation_sorted_pol_0 = filter(lambda a: parse_orientation(a) == 0, rotation_sorted_pol_files)
-        rotation_sorted_pol_45 = filter(lambda a: parse_orientation(a) == 45, rotation_sorted_pol_files)
-        rotation_sorted_pol_90 = filter(lambda a: parse_orientation(a) == 90, rotation_sorted_pol_files)
 
         if use_raw:
             images0 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_0))
-            images45 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_45))
-            images90 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_90))
         else: 
             images0 = map(cv2.imread, rotation_sorted_pol_0)
-            images45 = map(cv2.imread, rotation_sorted_pol_45)
-            images90 = map(cv2.imread, rotation_sorted_pol_90)
 
-        small_gray0, small_gray45, small_gray90 = map(lambda i: map(small, map(gray, i)), [images0, images45, images90])
-        assert map(parse_rotation, rotation_sorted_pol_0) == map(parse_rotation, rotation_sorted_pol_45)
-        assert map(parse_rotation, rotation_sorted_pol_0) == map(parse_rotation, rotation_sorted_pol_90)
+        small_gray0 = map(lambda i: small(gray(i)), images0)
         rotations = map(parse_rotation, rotation_sorted_pol_0)
         time_rotations = [(parse_zenith_time(zenith_time), rotation) for rotation in rotations]
-        zipped_rotation_images = zip(time_rotations, zip(small_gray0, small_gray45, small_gray90))
+        zipped_rotation_images = zip(time_rotations, small_gray0)
         zenith_time_rotation.append(zipped_rotation_images)
 
         if last and last <= count:
@@ -231,7 +252,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
         save(zenith_time_rotation, save_directory)
     else:
         display_trackbar = lambda _: display(cv2.getTrackbarPos('Time Index', suffixed('control')), cv2.getTrackbarPos('Rotation Index', suffixed('control')))
-        display = lambda time_index, rotation_index: display_stokes(zenith_time_rotation[time_index][rotation_index])
+        display = lambda time_index, rotation_index: display_stokes(monocular(zenith_time_rotation[time_index])[rotation_index])
 
         cv2.namedWindow(suffixed('control'))
         cv2.createTrackbar('Time Index', suffixed('control'), 0, time_points, display_trackbar)
@@ -245,7 +266,8 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
 
 def save(time_rotation_images, save_directory):
     for rotation_images in time_rotation_images:
-        for images in rotation_images:
+        monocular_images = monocular(rotation_images)
+        for images in monocular_images:
             display_stokes(images, save_directory)
 
 def save_labeled_images(time, rotation, labeled_images, directory):
@@ -275,4 +297,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
 
 if __name__ == '__main__':
     show_subset = False
-    visualize_sevilla_zenith(sys.argv[1], False, save_directory='aye-sevilla-zenith-stokes-analysis')
+    visualize_sevilla_zenith(sys.argv[1], use_raw=False, save_directory="aye-zenith-monocular-0")
