@@ -98,13 +98,14 @@ def sunny(image, sun_at_degrees):
     middle = np.array(image.shape[:2]) / 2
     sun_orbit_radius = 100
     sun_direction = point_on_circle(np.deg2rad(sun_at_degrees), sun_orbit_radius) + middle
-    return cv2.arrowedLine(image, tuple(middle[::-1]), tuple(sun_direction.astype(int)[::-1]), (0, 255, 255), 2)
+    return cv2.arrowedLine(image, tuple(middle[::-1]), tuple(sun_direction.astype(int)[::-1]), color=(0., 1., 1.), thickness=1)
 
-def with_evectors_and_sun(pol_angle_radians, rotation):
+def with_evectors_and_sun(pol_angle_radians, linear_degree, rotation):
     downsample = 15
     angle_in_degrees = stokes.angle_to_hue(pol_angle_radians)
     pol_angle_radians_downsampled = small(pol_angle_radians[::downsample, ::downsample])
-    angle_image_downsampled = cv2.cvtColor(cv2.merge(stokes.angle_hsv(pol_angle_radians_downsampled)), cv2.COLOR_HSV2BGR) 
+    linear_degree_downsampled = small(linear_degree[::downsample, ::downsample])
+    angle_image_downsampled = cv2.cvtColor(cv2.merge(stokes.angle_hsv(pol_angle_radians_downsampled, linear_degree_downsampled)), cv2.COLOR_HSV2BGR) 
     angle_in_degrees_downsampled = stokes.angle_to_hue(pol_angle_radians_downsampled)
 
     width = angle_in_degrees.shape[0]
@@ -129,25 +130,37 @@ def display_labeled_images(labeled_images):
         if not show_subset or label in labels_subset:
             cv2.imshow(suffixed(label), image)
 
-def shift45(rotation_images):
+def rotate(images, angle):
+    size = (images[0].shape[1], images[0].shape[0])
+    center = (size[0]/2, size[1]/2)
+    scale = 1
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, scale)
+    
+    return map(lambda i: cv2.warpAffine(i, rotation_matrix, size), images)
+
+def central_region(time_rotation_image):
+    (time, rotation), image = time_rotation_image
+    return (time, rotation), small(image[90:270, 80:400])
+
+def shift(rotation_images, shift_amount):
     starting_rotation = rotation_images[0][0][1]
 
     cutoff = -1
     for index, ((time, rotation), image) in enumerate(rotation_images):
-        if abs(rotation - starting_rotation - 45) <= 5:
+        if abs(rotation - starting_rotation - shift_amount) <= 5:
             cutoff = index
             break
 
-    if cutoff == -1:
-        ipdb.set_trace()
     assert cutoff is not -1, "Could not shift 45"
 
-    return rotation_images[cutoff:]
+    time_rotation, images = zip(*rotation_images[cutoff:])
+
+    return zip(time_rotation, rotate(images, -shift_amount))
 
 def monocular(rotation_images):
-    rotation_images0 = rotation_images
-    rotation_images45 = shift45(rotation_images0)
-    rotation_images90 = shift45(rotation_images45)
+    rotation_images0 = map(central_region, rotation_images)
+    rotation_images45 = map(central_region, shift(rotation_images, 45))
+    rotation_images90 = map(central_region, shift(rotation_images, 90))
 
     return zip(rotation_images0, rotation_images45, rotation_images90)
 
@@ -166,7 +179,7 @@ def display_stokes(time_rotation_images, save_directory = None):
     normalized_stokesQ = aye_utils.normalized_uint8(stokesQ, 255)
     normalized_stokesU = aye_utils.normalized_uint8(stokesU, 255)
     angle_image = cv2.cvtColor(cv2.merge(stokes.angle_hsv(polAoP)), cv2.COLOR_HSV2BGR) 
-    angle_evectors, angle_in_degrees_downsampled = with_evectors_and_sun(polAoP, rotation0)
+    angle_evectors, angle_in_degrees_downsampled = with_evectors_and_sun(polAoP, polDoLP, rotation0)
 
     normalized_degree = aye_utils.normalized_uint8(polDoLP, 1)
     normalized_angle = aye_utils.normalized_uint8(angle_image, 1)
@@ -297,4 +310,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
 
 if __name__ == '__main__':
     show_subset = False
-    visualize_sevilla_zenith(sys.argv[1], use_raw=False, save_directory="aye-zenith-monocular-0")
+    visualize_sevilla_zenith(sys.argv[1], use_raw=False)
