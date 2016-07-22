@@ -18,8 +18,11 @@ def getStokes(gray0, gray45, gray90):
 
     return stokesI, stokesQ, stokesU, polInt, polDoLP, polAoP
 
-def angle_to_hue(polarization_angle):
-    return -(polarization_angle)*(180/3.1416)
+def angle_to_hue(polarization_angle, invert = False):
+    angle = (polarization_angle)*(180/3.1416)
+    if invert:
+        return -angle
+    return angle
 
 def toHSV(polInt, polDoLP, polAoP):
     #prepare DOLPi HSV image

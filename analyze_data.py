@@ -7,10 +7,12 @@ import numpy as np
 import aye_utils
 import rpi_raw
 import sys
+import matplotlib.pyplot as plt
 
 SUFFIX = 'aye-analyze'
 DATA_DIRECTORY = os.path.expanduser("~/aye-data/")
 SYNCHRONIZED_THRESHOLD_MS = 30
+polarization_degree_cutoff = 0.1
 
 def get_files_in_directory(directory):
     files = []
@@ -102,11 +104,11 @@ def sunny(image, sun_at_degrees):
 
 def with_evectors_and_sun(pol_angle_radians, linear_degree, rotation):
     downsample = 15
-    angle_in_degrees = stokes.angle_to_hue(pol_angle_radians)
+    angle_in_degrees = stokes.angle_to_hue(pol_angle_radians, invert=True)
     pol_angle_radians_downsampled = small(pol_angle_radians[::downsample, ::downsample])
     linear_degree_downsampled = small(linear_degree[::downsample, ::downsample])
     angle_image_downsampled = cv2.cvtColor(cv2.merge(stokes.angle_hsv(pol_angle_radians_downsampled, linear_degree_downsampled)), cv2.COLOR_HSV2BGR) 
-    angle_in_degrees_downsampled = stokes.angle_to_hue(pol_angle_radians_downsampled)
+    angle_in_degrees_downsampled = stokes.angle_to_hue(pol_angle_radians_downsampled, invert=True)
 
     width = angle_in_degrees.shape[0]
     height = angle_in_degrees.shape[1]
@@ -146,7 +148,7 @@ def shift(rotation_images, shift_amount):
     starting_rotation = rotation_images[0][0][1]
 
     cutoff = -1
-    for index, ((time, rotation), image) in enumerate(rotation_images):
+    for index, ((time, rotation), images) in enumerate(rotation_images):
         if abs(rotation - starting_rotation - shift_amount) <= 5:
             cutoff = index
             break
@@ -158,14 +160,85 @@ def shift(rotation_images, shift_amount):
     return zip(time_rotation, rotate(images, -shift_amount))
 
 def monocular(rotation_images):
-    rotation_images0 = map(central_region, rotation_images)
-    rotation_images45 = map(central_region, shift(rotation_images, 45))
-    rotation_images90 = map(central_region, shift(rotation_images, 90))
+    time_rotations, images = zip(*rotation_images)
+    time_rotation_monocular = zip(time_rotations, map(itemgetter(0), images))
+
+    rotation_images0 = map(central_region, time_rotation_monocular)
+    rotation_images45 = map(central_region, shift(time_rotation_monocular, 45))
+    rotation_images90 = map(central_region, shift(time_rotation_monocular, 90))
 
     return zip(rotation_images0, rotation_images45, rotation_images90)
 
-def display_stokes(time_rotation_images, save_directory = None):
-    ((time0, rotation0), image0),((time45, rotation45), image45),((time90, rotation90), image90) = time_rotation_images
+def get_angle_pol_degree(images, invert=False):
+    stokesI, stokesQ, stokesU, intensity, linear_degree, angle = stokes.getStokes(images[0], images[1], images[2])
+    angle_degrees = stokes.angle_to_hue(angle, invert)
+    return angle_degrees, linear_degree
+
+def degree_cutoff(angle_pol_degree):
+    angle, pol_degree = angle_pol_degree
+    mask = pol_degree > polarization_degree_cutoff
+
+    if not np.any(mask):
+        print("Empty mask, returning unmasked")
+        return angle
+
+    return angle[mask]
+
+def get_median_polarization_angles(images, invert_angle=False):
+    angles, linear_degrees = zip(*map(lambda a: get_angle_pol_degree(a, invert_angle), images))
+    median_polarization_angles = map(np.median, angles) 
+
+    median_polarization_angles_degree_cutoff = map(np.median, map(degree_cutoff, zip(angles, linear_degrees)))
+
+    return median_polarization_angles, median_polarization_angles_degree_cutoff
+
+def get_graph_data(monocular_time_rotation_images, time_rotation_images):
+    (time_rotations0, images0), (time_rotations45, images45), (time_rotations90, images90) = map(lambda a: zip(*a), zip(*monocular_time_rotation_images))
+    rotations = map(itemgetter(1), time_rotations0)
+
+    median_polarization_angles_monocular, median_polarization_angles_degree_cutoff_monocular = get_median_polarization_angles(zip(images0, images45, images90), True)
+
+    time_rotations, images = zip(*time_rotation_images)
+    median_polarization_angles, median_polarization_angles_degree_cutoff = get_median_polarization_angles(images)
+    
+    monocular_data_size = len(median_polarization_angles_monocular)
+    median_polarization_angles = median_polarization_angles[:monocular_data_size]
+    median_polarization_angles_degree_cutoff = median_polarization_angles_degree_cutoff[:monocular_data_size]
+
+    return rotations, median_polarization_angles_monocular, median_polarization_angles_degree_cutoff_monocular, median_polarization_angles, median_polarization_angles_degree_cutoff
+
+def save_graphs(time, save_directory, rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff):
+    plt.close('all')
+    hour_minutes = minutes_to_hour_minutes(time)
+    plt.figure(figsize=(13, 10))
+    plt.title("Motor rotation versus e-vectors at %s" % hour_minutes)
+    show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff)
+    if not os.path.isdir(save_directory):
+        os.makedirs(save_directory)
+    plt.savefig('%s/%s.png' % (save_directory, hour_minutes), bbox_inches='tight')
+
+def show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff):
+    blue, = plt.plot(rotations, median_angles, 'b', label='Median e-vector orientation')
+    magenta, = plt.plot(rotations, median_angles_degree_cutoff, 'm', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
+    red, = plt.plot(rotations, median_angles_monocular, 'r', label='Median e-vector orientation (Monocular)')
+    green, = plt.plot(rotations, median_angles_degree_cutoff_monocular, 'g', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
+
+    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=2, mode="expand", borderaxespad=0.)
+
+def show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff):
+    blue, = plt.plot(rotations, median_angles, 'b', label='Median e-vector orientation')
+    magenta, = plt.plot(rotations, median_angles_degree_cutoff, 'm', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
+    red, = plt.plot(rotations, median_angles_monocular, 'r', label='Median e-vector orientation (Monocular)')
+    green, = plt.plot(rotations, median_angles_degree_cutoff_monocular, 'g', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
+
+    plt.legend(loc=9, bbox_to_anchor=(0.5, -0.1), ncol=2, mode="expand", borderaxespad=0.)
+
+def display_stokes(time_rotation_images, rotation_index, save_directory = None):
+    monocular_time_rotation_images = monocular(time_rotation_images)
+    if rotation_index >= len(monocular_time_rotation_images):
+        print("No image for rotation index %d" % rotation_index)
+        return
+    ((time0, rotation0), image0),((time45, rotation45), image45),((time90, rotation90), image90) = monocular_time_rotation_images[rotation_index]
 
     assert time0 == time45 and time45 == time90
 
@@ -185,17 +258,22 @@ def display_stokes(time_rotation_images, save_directory = None):
     normalized_angle = aye_utils.normalized_uint8(angle_image, 1)
     normalized_angle_evectors = aye_utils.normalized_uint8(angle_evectors, 1)
 
-    labels = ['0', '45', '90', 'linear-degree', 'stokes-q', 'stokes-u', 'angle', 'angle-evectors']
-    labeled_images = zip(labels, [images[0], images[1], images[2], normalized_degree, normalized_stokesQ, normalized_stokesU, normalized_angle, normalized_angle_evectors])
+    labels = ['0', '45', '90', 'linear-degree', 'stokes-u', 'angle', 'angle-evectors']
+    labeled_images = zip(labels, [images[0], images[1], images[2], normalized_degree, normalized_stokesU, normalized_angle, normalized_angle_evectors])
 
+
+    rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff = get_graph_data(monocular_time_rotation_images, time_rotation_images)
     if save_directory:
-        save_labeled_images(time, rotation0, labeled_images, save_directory)
+        #save_labeled_images(time, rotation0, labeled_images, save_directory)
+        save_graphs(time, save_directory, rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff)
     else:
         update_control_view(time, rotation0, rotation45, rotation90)
         display_labeled_images(labeled_images)
         pixel_info = PixelInfo([('angle', angle_in_degrees_downsampled), ('pol-degree', polDoLP)]) 
         cv2.setMouseCallback(suffixed('angle-with-lines'), pixel_info.output)
         cv2.setMouseCallback(suffixed('linear-degree'), pixel_info.output)
+        show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff)
+
 
 def parse_zenith_time(file_path):
     time_text = os.path.split(file_path)[-1].split('-')[-1]
@@ -219,6 +297,8 @@ def parse_rotation(sevilla_zenith_image_path):
     return int(os.path.split(sevilla_zenith_image_path)[-1].split('-')[4])
 
 def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, save_directory = False):
+    plt.ion()
+
     zenith_times = filter(lambda f: 'azim' in f, get_files_in_directory(directory))
     parsed_zenith_times = map(parse_zenith_time, zenith_times)
     zenith_times = map(itemgetter(1), sorted(zip(parsed_zenith_times, zenith_times)))
@@ -245,16 +325,24 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
 
         rotation_sorted_pol_files = map(itemgetter(1), sorted(zip(map(parse_rotation, pol_files), pol_files)))
         rotation_sorted_pol_0 = filter(lambda a: parse_orientation(a) == 0, rotation_sorted_pol_files)
+        rotation_sorted_pol_45 = filter(lambda a: parse_orientation(a) == 45, rotation_sorted_pol_files)
+        rotation_sorted_pol_90 = filter(lambda a: parse_orientation(a) == 90, rotation_sorted_pol_files)
 
         if use_raw:
             images0 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_0))
+            images45 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_45))
+            images90 = map(methodcaller('demosaic'), map(lambda f: rpi_raw.from_raw_jpeg(f), rotation_sorted_pol_90))
         else: 
             images0 = map(cv2.imread, rotation_sorted_pol_0)
+            images45 = map(cv2.imread, rotation_sorted_pol_45)
+            images90 = map(cv2.imread, rotation_sorted_pol_90)
 
         small_gray0 = map(lambda i: small(gray(i)), images0)
+        small_gray45 = map(lambda i: small(gray(i)), images45)
+        small_gray90 = map(lambda i: small(gray(i)), images90)
         rotations = map(parse_rotation, rotation_sorted_pol_0)
         time_rotations = [(parse_zenith_time(zenith_time), rotation) for rotation in rotations]
-        zipped_rotation_images = zip(time_rotations, small_gray0)
+        zipped_rotation_images = zip(time_rotations, zip(small_gray0,small_gray45, small_gray90))
         zenith_time_rotation.append(zipped_rotation_images)
 
         if last and last <= count:
@@ -265,7 +353,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
         save(zenith_time_rotation, save_directory)
     else:
         display_trackbar = lambda _: display(cv2.getTrackbarPos('Time Index', suffixed('control')), cv2.getTrackbarPos('Rotation Index', suffixed('control')))
-        display = lambda time_index, rotation_index: display_stokes(monocular(zenith_time_rotation[time_index])[rotation_index])
+        display = lambda time_index, rotation_index: plt.close('all') or display_stokes(zenith_time_rotation[time_index], rotation_index)
 
         cv2.namedWindow(suffixed('control'))
         cv2.createTrackbar('Time Index', suffixed('control'), 0, time_points, display_trackbar)
@@ -279,9 +367,7 @@ def visualize_sevilla_zenith(directory, use_raw=True, first=None, last=None, sav
 
 def save(time_rotation_images, save_directory):
     for rotation_images in time_rotation_images:
-        monocular_images = monocular(rotation_images)
-        for images in monocular_images:
-            display_stokes(images, save_directory)
+        display_stokes(rotation_images, 0, save_directory=save_directory)
 
 def save_labeled_images(time, rotation, labeled_images, directory):
     hour_minutes = minutes_to_hour_minutes(time)
@@ -310,4 +396,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
 
 if __name__ == '__main__':
     show_subset = False
-    visualize_sevilla_zenith(sys.argv[1], use_raw=False)
+    visualize_sevilla_zenith(sys.argv[1], use_raw=False, save_directory="sevilla-zenith-rotation-error")
