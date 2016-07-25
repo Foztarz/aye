@@ -222,8 +222,7 @@ def show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_
     magenta, = plt.plot(rotations, median_angles_degree_cutoff, 'm', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
     red, = plt.plot(rotations, median_angles_monocular, 'r', label='Median e-vector orientation (Monocular)')
     green, = plt.plot(rotations, median_angles_degree_cutoff_monocular, 'g', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
-
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=2, mode="expand", borderaxespad=0.)
+    plt.axis([0, 250, -90, 90])
 
 def show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_monocular, median_angles, median_angles_degree_cutoff):
     blue, = plt.plot(rotations, median_angles, 'b', label='Median e-vector orientation')
@@ -231,6 +230,8 @@ def show_graphs(rotations, median_angles_monocular, median_angles_degree_cutoff_
     red, = plt.plot(rotations, median_angles_monocular, 'r', label='Median e-vector orientation (Monocular)')
     green, = plt.plot(rotations, median_angles_degree_cutoff_monocular, 'g', label='As above, but only >%d%% polarization' % (100*polarization_degree_cutoff))
 
+    plt.axis([0, 250, -90, 90])
+    plt.yticks(range(-90, 91, 20))
     plt.legend(loc=9, bbox_to_anchor=(0.5, -0.1), ncol=2, mode="expand", borderaxespad=0.)
 
 def display_stokes(time_rotation_images, rotation_index, save_directory = None):
@@ -396,4 +397,4 @@ def raw_to_image(file_path, out=None, ext='.png', to_small=False, to_gray=False)
 
 if __name__ == '__main__':
     show_subset = False
-    visualize_sevilla_zenith(sys.argv[1], use_raw=False, save_directory="sevilla-zenith-rotation-error")
+    visualize_sevilla_zenith(sys.argv[1], use_raw=False, save_directory="sevilla-zenith-motor-rotation-vs-evectors-fixed-y")
