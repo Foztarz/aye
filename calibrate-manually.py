@@ -4,14 +4,23 @@ import numpy as np
 import ipdb
 import os
 import pickle
+import aye_utils
+from operator import itemgetter
+
+TRANSFORMATION_SUFFIX = '.transformation.txt'
+
+def suffixed(str):
+    return "%s-%s" % (str, SUFFIX)
+
+SUFFIX = 'aye-analyze'
 
 def get_pol_files_in_directory(directory):
     files = []
     for file in os.listdir(directory):
-        if 'pol' in file and '.transformation' not in file:
+        if 'pol' in file and TRANSFORMATION_SUFFIX not in file:
             files.append(os.path.join(directory, file))
 
-    return files
+    return [*map(itemgetter(1), sorted(zip(map(parse_hostname, files), files)))]
 
 def reset_to_original():
     global images, images_original
@@ -19,7 +28,7 @@ def reset_to_original():
 
 def put_center_text(image, text):
     rows, cols = image.shape
-    middle = (cols/2, rows/2)
+    middle = (cols//2, rows//2)
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(image, text, middle, font, 1, (128,128,128), 2, cv2.LINE_AA)
 
@@ -39,7 +48,7 @@ def show():
         transformed.append(dst)
 
     merged = cv2.merge(transformed)
-    cv2.imshow("merged", merged)
+    cv2.imshow(suffixed("merged"), merged)
     reset_to_original()
 
 def get_translation(image_number):
@@ -66,35 +75,57 @@ def rotate(delta_alpha):
     rotations[selection] = old_alpha + delta_alpha
     print("New rotation for %d: %d" % (selection, rotations[selection]))
 
-def save_transformations():
+def save_transformations(dir = None):
     global image_names
 
     for index, image_name in enumerate(image_names):
         number = index + 1
         rotation = get_rotation(number)
         translation = get_translation(number)
-        transformation_file_name = image_name + '.transformation'
-        pickle.dump((rotation, translation), open(transformation_file_name, 'w'))
+        transformation_file_name = determine_transformation_file_name(image_name, dir)
+        pickle.dump((rotation, translation), open(transformation_file_name, 'wb'))
 
-    print("Saved transformations")
+    print("Saved transformations to %s" % os.path.split(determine_transformation_file_name(image_names[0], dir))[0])
 
-def load_transformations():
+
+def parse_hostname(image_name):
+    matcher = aye_utils.pol_hostnames_pattern.search(image_name)
+    if matcher is not None:
+        return image_name[matcher.start():matcher.end()]
+    else:
+        print("Could not parse hostname from: %s" % image_name)
+        return None
+
+def determine_transformation_file_name(image_name, dir):
+    if dir is None:
+        transformation_file_name = image_name + TRANSFORMATION_SUFFIX 
+    else:
+        transformation_file_name = dir + '/' + parse_hostname(image_name) + TRANSFORMATION_SUFFIX
+
+    return transformation_file_name
+
+def load_transformations(dir=None):
     global image_names, translations, rotations
 
     for index, image_name in enumerate(image_names):
         number = index + 1
-        transformation_file_name = image_name + '.transformation'
+        transformation_file_name = determine_transformation_file_name(image_name, dir)
         if os.path.isfile(transformation_file_name):
-            rotation, translation = pickle.load(open(transformation_file_name, 'r'))
+            rotation, translation = pickle.load(open(transformation_file_name, 'rb'))
             rotations[number] = rotation
             translations[number] = translation
             print("Loaded translation %s and rotation %s for %d" % (translation, rotation, number))
 
 
 image_names = get_pol_files_in_directory(sys.argv[1])
+if len(sys.argv) > 2:
+    save_load_directory = sys.argv[2]
+else:
+    save_load_directory = None
+
 assert len(image_names) == 3, "Expected 3 polarization files, got: %s" % image_names
 
-images_original = map(lambda f: cv2.imread(f, 0), image_names)
+images_original = [*map(lambda f: cv2.imread(f, 0), image_names)]
 images = None
 reset_to_original()
 
@@ -105,7 +136,7 @@ rotations = {}
 mode = None
 selection = None
 
-load_transformations()
+load_transformations(save_load_directory)
 
 while 1:
     assert len(images) == 3
@@ -115,7 +146,7 @@ while 1:
         if selection is not None:
             selection = None
         else:
-            save_transformations()
+            save_transformations(save_load_directory)
             break
 
     elif k > ord('1') and k < ord('4'):

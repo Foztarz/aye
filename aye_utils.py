@@ -8,7 +8,7 @@ def wordlist_to_regex(words):
     return re.compile(combined)
 
 types = ['uv', 'pol-0', 'pol-45', 'pol-90', 'ir', 'vis']
-hostnames = map(lambda type: 'aye-' + type, types)
+hostnames = [*map(lambda type: 'aye-' + type, types)]
 hostnames_pattern = wordlist_to_regex(hostnames)
 
 pol_hostnames_pattern = wordlist_to_regex(filter(lambda a: 'pol' in a, hostnames))
