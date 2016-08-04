@@ -8,16 +8,16 @@ import aye_utils
 from operator import itemgetter
 
 TRANSFORMATION_SUFFIX = '.transformation.pickle'
+SUFFIX = 'aye-analyze'
 
 def suffixed(str):
     return "%s-%s" % (str, SUFFIX)
 
-SUFFIX = 'aye-analyze'
 
 def get_pol_files_in_directory(directory):
     files = []
     for file in os.listdir(directory):
-        if 'pol' in file and TRANSFORMATION_SUFFIX not in file:
+        if 'pol' in file and TRANSFORMATION_SUFFIX not in file and '.mask.png' not in file:
             files.append(os.path.join(directory, file))
 
     return [*map(itemgetter(1), sorted(zip(map(parse_hostname, files), files)))]
@@ -36,13 +36,12 @@ def parse_hostname(image_name):
         print("Could not parse hostname from: %s" % image_name)
         return None
 
-def determine_transformation_file_name(image_name, dir):
-    if dir is None:
-        transformation_file_name = image_name + TRANSFORMATION_SUFFIX 
-    else:
-        transformation_file_name = dir + '/' + parse_hostname(image_name) + TRANSFORMATION_SUFFIX
+def determine_transformation_file_name(image_path, dir):
+    transformation_file_path = image_path + TRANSFORMATION_SUFFIX 
+    if dir and not os.path.isfile(transformation_file_path):
+        transformation_file_path = dir + '/' + parse_hostname(image_path) + TRANSFORMATION_SUFFIX
 
-    return transformation_file_name
+    return transformation_file_path
 
 class ManualCalibrator:
 
@@ -95,6 +94,8 @@ class ManualCalibrator:
         print("Saved transformations to %s" % os.path.split(determine_transformation_file_name(self.image_names[0], dir))[0])
 
     def load_transformations(self, dir=None):
+        self.translations = {}
+        self.rotations = {}
         for index, image_name in enumerate(self.image_names):
             number = index + 1
             transformation_file_name = determine_transformation_file_name(image_name, dir)
@@ -118,21 +119,23 @@ class ManualCalibrator:
 
         assert len(self.images) == 3, "Populating images from original failed"
 
-        self.translations = {}
-        self.rotations = {}
         self.selection = None
 
-    def start(self):
         self.load_transformations(self.save_load_directory)
+
+    def start(self, scene_specific_calibration=False):
         mode = None
         transformed = None
+
+        if scene_specific_calibration:
+            self.load_transformations()
 
         while 1:
             assert len(self.images) == 3
             k = cv2.waitKey(100) & 0xFF
 
             if k == 27:
-                if self.selection is not None:
+                if self.selection:
                     self.selection = None
                 else:
                     break
@@ -144,15 +147,15 @@ class ManualCalibrator:
                 self.selection = image_number
                 mode = None
 
-            elif self.selection is not None and k == ord('t'):
+            elif self.selection and k == ord('t'):
                 mode = "translate"
                 print("Entering mode %s for %d" % (mode, self.selection))
 
-            elif self.selection is not None and k == ord('r'):
+            elif self.selection and k == ord('r'):
                 mode = "rotate"
                 print("Entering mode %s for %d" % (mode, self.selection))
 
-            elif mode is not None:
+            elif self.selection and mode:
                 if mode is "translate":
                     if k == 81: # left
                         self.translate(-1, 0)
@@ -171,7 +174,7 @@ class ManualCalibrator:
             elif k != 255:
                 print("Unknown key pressed: %d" %  k)
 
-            if self.selection is not None:
+            if self.selection:
                 description = str(self.selection)
                 if mode is not None:
                     description += mode[0]
@@ -180,7 +183,10 @@ class ManualCalibrator:
 
             transformed = self.show()
 
-        self.save_transformations(self.save_load_directory)
+        if scene_specific_calibration:
+            self.save_transformations()
+        else:
+            self.save_transformations(self.save_load_directory)
 
         return transformed
 
