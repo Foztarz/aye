@@ -44,11 +44,13 @@ def determine_transformation_file_name(image_path, dir):
     return transformation_file_path
 
 class ManualCalibrator:
+    def get_calibrated_masked(self):
+        calibrated = self.get_calibrated()
+        mask = self.get_calibrated_mask(calibrated)
+        apply_mask = lambda c: cv2.bitwise_and(c, c, mask=mask)
+        return [*map(apply_mask, calibrated)]
 
-    def reset_to_original(self):
-        self.images = list(map(lambda a: a.copy(), self.images_original))
-
-    def show(self):
+    def get_calibrated(self):
         transformed = []
         for index, image in enumerate(self.images):
             rows, cols = image.shape
@@ -62,10 +64,20 @@ class ManualCalibrator:
             dst = cv2.warpAffine(dst, rotation_matrix, (cols,rows))
             transformed.append(dst)
 
-        merged = cv2.merge(transformed)
+        return transformed
+    
+    def get_calibrated_mask(self, calibrated):
+        return np.where((calibrated[0] != 0)*(calibrated[1] != 0)*(calibrated[2] != 0), 255, 0).astype('uint8')
+
+    def reset_to_original(self):
+        self.images = list(map(lambda a: a.copy(), self.images_original))
+
+    def show(self):
+        calibrated = self.get_calibrated_masked()
+        merged = cv2.merge(calibrated)
         cv2.imshow(suffixed("merged"), merged)
         self.reset_to_original()
-        return transformed
+        return calibrated
 
     def get_translation(self, image_number):
         return self.translations.setdefault(image_number, (0,0))
